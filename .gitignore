@@ -1,0 +1,6 @@
+lex.yy.c
+cpq.o
+cpq.tab.c
+cpq.tab.h
+cpq
+cpq.exe
