@@ -22,6 +22,8 @@
 %option noyywrap
 %option yylineno
 
+%x COMMENT
+
 symbol                          [(){},:;=]
 digit                           [0-9]
 letter                          [A-Za-z]
@@ -66,6 +68,12 @@ letter                          [A-Za-z]
 
 {digit}+                        { return NUM; }
 {digit}+"."{digit}*             { return NUM; }
+
+"/""*"+                         { BEGIN(COMMENT); /* this is a start of a comment, so go to start condition */ }
+<COMMENT>{
+    "*"+"/"                     { BEGIN(0); /* comment ended, leave start condition */ }
+    .                           { /* ignore the body of the comment */ } 
+}
 
 [\t\n ]+                        /* ignore spaces, tabs and newlines */
 
