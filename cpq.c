@@ -20,5 +20,6 @@ int main (int argc, char **argv) {
         fprintf (stdout, "Token: %d\n", token);
     }
 
+    fclose (yyin);
     return 0;
 }

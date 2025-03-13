@@ -1,5 +1,7 @@
 %{
 
+#include "cpq.tab.h"
+
 #define EQ                      10
 #define NEQ                     11
 #define LT                      12
