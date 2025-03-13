@@ -15,10 +15,12 @@ int main (int argc, char **argv) {
 
     fprintf (stdout, "Managed to read the file!\n");
 
-    int token;
-    while ((token = yylex()) != 0) {
-        fprintf (stdout, "Token: %d\n", token);
-    }
+    // int token;
+    // while ((token = yylex()) != 0) {
+    //     fprintf (stdout, "Token: %d\n", token);
+    // }
+
+    yyparse();
 
     fclose (yyin);
     return 0;

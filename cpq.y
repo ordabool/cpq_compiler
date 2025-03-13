@@ -1,7 +1,9 @@
-%{
+%code {
     #include <stdio.h>
     void yyerror (const char *s);
-%}
+}
+
+%define parse.error verbose
 
 %token BREAK
 %token CASE
@@ -116,5 +118,6 @@ factor          :   '(' expression ')'
 
 void yyerror (const char *s)
 {
-    fprintf (stderr, "%s\n", s);
+    extern int yylineno;
+    fprintf (stderr, "line %d: %s\n", yylineno, s);
 }
