@@ -17,28 +17,6 @@
 #define INT_CODE                22
 #define FLOAT_CODE              23
 
-#define BREAK                   100
-#define CASE                    101
-#define DEFAULT                 102
-#define ELSE                    103
-#define FLOAT                   104
-#define IF                      105
-#define INPUT                   106
-#define INT                     107
-#define OUTPUT                  108
-#define SWITCH                  109
-#define WHILE                   110
-#define RELOP                   111
-#define ADDOP                   112
-#define MULOP                   113
-#define OR                      114
-#define AND                     115
-#define NOT                     116
-#define CAST                    117
-#define ID                      118
-#define NUM                     119
-#define SYMOBL                  120
-
 %}
 
 %option noyywrap
@@ -62,7 +40,7 @@ letter                          [A-Za-z]
 "switch"                        { return SWITCH; }
 "while"                         { return WHILE; }
 
-{symbol}                        { return SYMOBL; }
+{symbol}                        { return yytext[0]; }
 
 "=="                            { return RELOP; }
 "!="                            { return RELOP; }
