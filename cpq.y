@@ -1,5 +1,6 @@
 %code {
     #include <stdio.h>
+    #include "types.h"
     extern int yylineno;
 
     void yyerror (const char *s);

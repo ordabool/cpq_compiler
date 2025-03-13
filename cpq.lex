@@ -1,21 +1,7 @@
 %{
 
 #include "cpq.tab.h"
-
-#define EQ                      10
-#define NEQ                     11
-#define LT                      12
-#define GT                      13
-#define GTE                     14
-#define LTE                     15
-#define ADD                     16
-#define SUB                     17
-#define MUL                     18
-#define DIV                     19
-#define CASTI                   20
-#define CASTF                   21
-#define INT_CODE                22
-#define FLOAT_CODE              23
+#include "types.h"
 
 %}
 
@@ -72,7 +58,7 @@ letter                          [A-Za-z]
 "/""*"+                         { BEGIN(COMMENT); /* this is a start of a comment, so go to start condition */ }
 <COMMENT>{
     "*"+"/"                     { BEGIN(0); /* comment ended, leave start condition */ }
-    .                           { /* ignore the body of the comment */ } 
+    .                           /* ignore the body of the comment */
 }
 
 [\t\n ]+                        /* ignore spaces, tabs and newlines */
