@@ -44,30 +44,30 @@ letter                          [A-Za-z]
 
 {symbol}                        { return yytext[0]; }
 
-"=="                            { return RELOP; }
-"!="                            { return RELOP; }
-"<"                             { return RELOP; }
-">"                             { return RELOP; }
-">="                            { return RELOP; }
-"<="                            { return RELOP; }
+"=="                            { yylval.attr = EQ; return RELOP; }
+"!="                            { yylval.attr = NEQ; return RELOP; }
+"<"                             { yylval.attr = LT; return RELOP; }
+">"                             { yylval.attr = GT; return RELOP; }
+">="                            { yylval.attr = GTE; return RELOP; }
+"<="                            { yylval.attr = LTE; return RELOP; }
 
-"+"                             { return ADDOP; }
-"-"                             { return ADDOP; }
+"+"                             { yylval.attr = ADD; return ADDOP; }
+"-"                             { yylval.attr = SUB; return ADDOP; }
 
-"*"                             { return MULOP; }
-"/"                             { return MULOP; }
+"*"                             { yylval.attr = MUL; return MULOP; }
+"/"                             { yylval.attr = DIV; return MULOP; }
 
 "||"                            { return OR; }
 "&&"                            { return AND; }
 "!"                             { return NOT; }
 
-"cast<int>"                     { return CAST; }
-"cast<float>"                   { return CAST; }
+"cast<int>"                     { yylval.attr = CASTI; return CAST; }
+"cast<float>"                   { yylval.attr = CASTF; return CAST; }
 
-{letter}({letter}|{digit})*     { return ID; }
+{letter}({letter}|{digit})*     { strcpy (yylval.id, yytext); return ID; }
 
-{digit}+                        { return NUM; }
-{digit}+"."{digit}*             { return NUM; }
+{digit}+                        { yylval.num.attr = INT_CODE; yylval.num.intVal = atoi(yytext); return NUM; }
+{digit}+"."{digit}*             { yylval.num.attr = FLOAT_CODE; yylval.num.floatVal = atof(yytext); return NUM; }
 
 "/""*"+                         { BEGIN(COMMENT); /* this is a start of a comment, so go to start condition */ }
 <COMMENT>{

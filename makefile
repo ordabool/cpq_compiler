@@ -6,6 +6,10 @@ COMP_FLAG = -Wno-implicit-function-declaration
 $(EXEC) : $(OBJS)
 	$(CC) $(COMP_FLAG) $(OBJS) -o $(EXEC)
 
+# Prevent default make behavior (overwrites cpq.c)
+%.c: %.y
+%.c: %.l
+
 cpq.o : cpq.c
 	$(CC) -c $(COMP_FLAG) cpq.c
 

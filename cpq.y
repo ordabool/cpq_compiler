@@ -1,6 +1,18 @@
 %code {
     #include <stdio.h>
+    extern int yylineno;
+
     void yyerror (const char *s);
+}
+
+%union {
+    int attr;
+    struct {
+        int attr;
+        int intVal;
+        float floatVal;
+    } num;
+    char id [80];
 }
 
 %define parse.error verbose
@@ -16,15 +28,18 @@
 %token OUTPUT
 %token SWITCH
 %token WHILE
-%token RELOP
-%token ADDOP
-%token MULOP
+%token <attr> RELOP
+%token <attr> ADDOP
+%token <attr> MULOP
 %token OR
 %token AND
 %token NOT
-%token CAST
-%token ID
-%token NUM
+%token <attr> CAST
+%token <id> ID
+%token <num> NUM
+
+/* TODO: this is the syntax to specify the type of non-terminals */
+/* %type <attr> expression boolfactor */
 
 %%
 
@@ -98,6 +113,9 @@ boolterm        :   boolterm AND boolfactor
 
 boolfactor      :   NOT '(' boolexpr ')'
                 |   expression RELOP expression
+                    {
+                        fprintf (stdout, "boolfactor spotted at line %d! Att: %d\n", yylineno, $2);
+                    }
                 ;
 
 expression      :   expression ADDOP term
@@ -118,6 +136,5 @@ factor          :   '(' expression ')'
 
 void yyerror (const char *s)
 {
-    extern int yylineno;
     fprintf (stderr, "line %d: %s\n", yylineno, s);
 }
