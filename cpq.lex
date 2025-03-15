@@ -52,8 +52,8 @@ letter                          [A-Za-z]
 
 {letter}({letter}|{digit})*     { strcpy (yylval.id, yytext); return ID; }
 
-{digit}+                        { yylval.num.attr = INT_CODE; yylval.num.intVal = atoi(yytext); return NUM; }
-{digit}+"."{digit}*             { yylval.num.attr = FLOAT_CODE; yylval.num.floatVal = atof(yytext); return NUM; }
+{digit}+                        { yylval.num.attr = INT_CODE; yylval.num.val = atoi(yytext); return NUM; }
+{digit}+"."{digit}*             { yylval.num.attr = FLOAT_CODE; yylval.num.val = atof(yytext); return NUM; }
 
 "/""*"+                         { BEGIN(COMMENT); /* this is a start of a comment, so go to start condition */ }
 <COMMENT>{

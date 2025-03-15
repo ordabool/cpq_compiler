@@ -12,3 +12,6 @@
 #define CASTF                   21
 #define INT_CODE                22
 #define FLOAT_CODE              23
+
+#define T_NUMBER                24
+#define T_ID                    25
