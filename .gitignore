@@ -1,5 +1,5 @@
 lex.yy.c
-cpq.o
+*.o
 cpq.tab.c
 cpq.tab.h
 cpq

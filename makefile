@@ -1,7 +1,7 @@
 CC = gcc
-OBJS = cpq.o lex.yy.c cpq.tab.h cpq.tab.c
+OBJS = cpq.o dict.o lex.yy.c cpq.tab.h cpq.tab.c
 EXEC = cpq
-COMP_FLAG = -Wno-implicit-function-declaration
+COMP_FLAG = -Wno-implicit-function-declaration -Wno-int-conversion
 
 $(EXEC) : $(OBJS)
 	$(CC) $(COMP_FLAG) $(OBJS) -o $(EXEC)
@@ -12,6 +12,9 @@ $(EXEC) : $(OBJS)
 
 cpq.o : cpq.c
 	$(CC) -c $(COMP_FLAG) cpq.c
+
+dict.o : dict.c
+	$(CC) -c $(COMP_FLAG) dict.c
 
 lex.yy.c : cpq.lex
 	flex cpq.lex

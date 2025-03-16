@@ -3,10 +3,9 @@
     #include <string.h>
     #include "types.h"
     extern int yylineno;
+    extern struct nlist* hashtab;
 
     void yyerror (const char *s);
-
-    // struct data init (struct data d);
 }
 
 %code requires {
@@ -53,6 +52,7 @@
 %token <num> NUM
 
 %type <d> factor expression term
+%type <attr> type
 
 %%
 
@@ -66,8 +66,8 @@ declarations    :   declarations declaration
 declaration     :   idlist ':' type ';'
                 ;
 
-type            :   INT
-                |   FLOAT
+type            :   INT { $$ = INT_CODE; }
+                |   FLOAT { $$ = FLOAT_CODE; }
                 ;
 
 idlist          :   idlist ',' ID
@@ -84,7 +84,15 @@ stmt            :   assignment_stmt
                 |   stmt_block
                 ;
 
-assignment_stmt :   ID '=' expression ';'
+assignment_stmt :   ID '=' expression ';' 
+                    { 
+                        struct nlist* var = lookup($1);
+                        if (var == NULL) {
+                            fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                        } else {
+                            install($1, $3.num.attr, $3.num.val);
+                        }
+                    }
                 ;
 
 input_stmt      :   INPUT '(' ID ')' ';'
@@ -214,7 +222,7 @@ factor          :   '(' expression ')' { $$ = $2; }
                             }
                         }
                     }
-                |   ID { $$.type = T_ID; strcpy($$.id, $1); }
+                |   ID { $$.type = T_ID; strcpy($$.id, $1); } // TODO: This is stupid - if ID I need to fetch the numerical value from symbols table
                 |   NUM { $$.type = T_NUMBER; $$.num = $1; }
                 ;
 
@@ -223,7 +231,3 @@ factor          :   '(' expression ')' { $$ = $2; }
 void yyerror (const char *s) {
     fprintf (stderr, "line %d: %s\n", yylineno, s);
 }
-
-/* struct data init (struct data d) {
-    d.type = -1;
-} */
