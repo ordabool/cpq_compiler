@@ -13,5 +13,9 @@
 #define INT_CODE                22
 #define FLOAT_CODE              23
 
-#define T_NUMBER                24
-#define T_ID                    25
+struct nlist { /* table entry: */
+    struct nlist *next; /* next entry in chain */
+    char *name; /* defined name */
+    float val; /* replacement text */
+    int type;
+};

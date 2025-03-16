@@ -2,13 +2,7 @@
 
 #include <stdlib.h>
 #include <string.h>
-
-struct nlist { /* table entry: */
-    struct nlist *next; /* next entry in chain */
-    char *name; /* defined name */
-    float val; /* replacement text */
-    int type;
-};
+#include "types.h"
 
 #define HASHSIZE 101
 static struct nlist *hashtab[HASHSIZE]; /* pointer table */
@@ -52,12 +46,3 @@ struct nlist *install(char *name, int type, float val)
     }
     return np;
 }
-
-// char *strdup(char *s) /* make a duplicate of s */
-// {
-//     char *p;
-//     p = (char *) malloc(strlen(s)+1); /* +1 for ’\0’ */
-//     if (p != NULL)
-//        strcpy(p, s);
-//     return p;
-// }

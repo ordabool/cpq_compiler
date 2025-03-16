@@ -13,6 +13,7 @@ int main (int argc, char **argv) {
          return 2;
     }
 
+    // TODO: Remove this!
     fprintf (stdout, "Managed to read the file!\n");
 
     // int token;
