@@ -13,16 +13,13 @@ int main (int argc, char **argv) {
          return 2;
     }
 
-    // TODO: Remove this!
-    fprintf (stdout, "Managed to read the file!\n");
-
     // int token;
     // while ((token = yylex()) != 0) {
     //     fprintf (stdout, "Token: %d\n", token);
     // }
 
     yyparse();
-
+    
     fclose (yyin);
     return 0;
 }

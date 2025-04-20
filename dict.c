@@ -2,9 +2,11 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include "types.h"
 
 #define HASHSIZE 101
+// TODO: Should be static?
 static struct nlist *hashtab[HASHSIZE]; /* pointer table */
 
 /* hash: form hash value for string s */
@@ -29,6 +31,7 @@ struct nlist *lookup(char *s)
 /* install: put (name, val, type) in hashtab */
 struct nlist *install(char *name, int type, float val)
 {
+    printf("In install: %s with type: %d and value: %f\n", name, type, val);
     struct nlist *np;
     unsigned hashval;
     if ((np = lookup(name)) == NULL) { /* not found */

@@ -1,10 +1,12 @@
 %code {
+    #include <stdlib.h>
     #include <stdio.h>
     #include <string.h>
     #include "types.h"
+    #include "dict.h"
     
     extern int yylineno;
-    extern struct nlist* hashtab;
+    extern struct nlist *hashtab;
 
     void yyerror (const char *s);
 
@@ -12,6 +14,42 @@
 
     int tempCount = 0;
     int labelCount = 0;
+
+    // TODO: Create a linked list file with appropriate header
+
+    // Function implementations
+    struct id_list* new_id_node(const char* id) {
+        printf("Creating new node for ID: %s\n", id);
+        struct id_list* node = (struct id_list*)malloc(sizeof(struct id_list));
+        node->id = strdup(id);
+        node->next = NULL;
+        return node;
+    }
+
+    struct id_list* append_id(struct id_list* list, const char* id) {
+        printf("Appending ID: %s\n", id);
+        if (list == NULL) {
+            return new_id_node(id);
+        }
+        // Find the last node
+        struct id_list* current = list;
+        while (current->next != NULL) {
+            current = current->next;
+        }
+        // Append the new node
+        current->next = new_id_node(id);
+        return list;
+    }
+
+    void free_id_list(struct id_list* list) {
+        printf("Freeing list\n");
+        if (list == NULL) return;
+        printf("Freeing node with ID: %s\n", list->id);
+        struct id_list* next = list->next;  // Save next pointer before freeing
+        // Don't free list->id since it's now owned by the hash table
+        free(list);  // Only free the list node
+        free_id_list(next);  // Process the rest of the list
+    }
 }
 
 %code requires {
@@ -19,12 +57,23 @@
         int attr; // Type (INT_CODE, FLOAT_CODE, etc.)
         float val;
     };
+
+    // Structure for holding a list of IDs
+    struct id_list {
+        char* id;
+        struct id_list* next;
+    };
+
+    // Function declarations
+    struct id_list* new_id_node(const char* id);
+    struct id_list* append_id(struct id_list* list, const char* id);
 }
 
 %union {
     int attr;
     struct number num;
-    char id [20];
+    char id [50];
+    struct id_list* id_list;
 }
 
 %define parse.error verbose
@@ -50,8 +99,9 @@
 %token <id> ID
 %token <num> NUM
 
-%type <id> factor expression term boolfactor
-%type <attr> type
+%type <id> factor expression term boolfactor boolexpr boolterm
+%type <attr> type declaration
+%type <id_list> idlist
 
 %%
 
@@ -63,6 +113,20 @@ declarations    :   declarations declaration
                 ;
 
 declaration     :   idlist ':' type ';'
+                    {
+                        printf("Processing declaration with type: %d\n", $3);
+                        // Install all IDs with the type
+                        struct id_list* current = $1;
+                        while (current != NULL) {
+                            printf("Installing ID: %s with type: %d and value: %f\n", current->id, $3, 1.0);
+                            install(current->id, $3, 1.0);
+                            current = current->next;
+                        }
+                        free_id_list($1);  // Free the list after we're done
+                        printf("List freed, setting declaration type to: %d\n", $3);
+                        $$ = $3;
+                        printf("Declaration complete\n");
+                    }
                 ;
 
 type            :   INT { $$ = INT_CODE; }
@@ -70,7 +134,15 @@ type            :   INT { $$ = INT_CODE; }
                 ;
 
 idlist          :   idlist ',' ID
+                    {
+                        printf("Processing multiple IDs, current ID: %s\n", $3);
+                        $$ = append_id($1, $3);
+                    }
                 |   ID
+                    {
+                        printf("Processing single ID: %s\n", $1);
+                        $$ = new_id_node($1);
+                    }
                 ;
 
 stmt            :   assignment_stmt
@@ -101,6 +173,16 @@ output_stmt     :   OUTPUT '(' expression ')' ';'
                 ;
 
 if_stmt         :   IF '(' boolexpr ')' stmt ELSE stmt
+                    {
+                        printf("Processing if statement with condition: %s\n", $3);
+                        struct nlist* cond = lookup($3);
+                        if (cond == NULL) {
+                            fprintf(stderr, "line %d: Internal error: boolean result not found\n", yylineno);
+                            YYERROR;
+                        } else {
+                            printf("Found condition variable with type %d\n", cond->type);
+                        }
+                    }
                 ;
 
 while_stmt      :   WHILE '(' boolexpr ')' stmt
@@ -124,50 +206,118 @@ stmtlist        :   stmtlist stmt
                 ;
 
 boolexpr        :   boolexpr OR boolterm
-                |   boolterm
-                ;
-
-boolterm        :   boolterm AND boolfactor
-                |   boolfactor
-                ;
-
-boolfactor      :   NOT '(' boolexpr ')' { }
-                |   expression RELOP expression
                     {
+                        printf("Processing OR operation\n");
+                        if (tempCount >= MAX_TEMP) {
+                            fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
+                            YYERROR;
+                        }
                         sprintf($$, "T%d", tempCount++);
                         struct nlist* a = lookup($1);
                         struct nlist* b = lookup($3);
                         if (a != NULL && b != NULL) {
                             install($$, INT_CODE, 0);
-                            if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
+                            fprintf(stdout, "OR %s %s %s\n", $$, $1, $3);
+                        } else {
+                            if (a == NULL) {
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                            }
+                            if (b == NULL) {
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            }
+                        }
+                    }
+                |   boolterm { strcpy($$, $1); }
+                ;
+
+boolterm        :   boolterm AND boolfactor
+                    {
+                        printf("Processing AND operation\n");
+                        if (tempCount >= MAX_TEMP) {
+                            fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
+                            YYERROR;
+                        }
+                        sprintf($$, "T%d", tempCount++);
+                        struct nlist* a = lookup($1);
+                        struct nlist* b = lookup($3);
+                        if (a != NULL && b != NULL) {
+                            install($$, INT_CODE, 0);
+                            fprintf(stdout, "AND %s %s %s\n", $$, $1, $3);
+                        } else {
+                            if (a == NULL) {
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                            }
+                            if (b == NULL) {
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            }
+                        }
+                    }
+                |   boolfactor { strcpy($$, $1); }
+                ;
+
+boolfactor      :   NOT '(' boolexpr ')' { }
+                |   expression RELOP expression
+                    {
+                        if (tempCount >= MAX_TEMP) {
+                            fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
+                            YYERROR;
+                        }
+                        sprintf($$, "T%d", tempCount++);
+                        struct nlist* a = lookup($1);
+                        struct nlist* b = lookup($3);
+                        if (a != NULL && b != NULL) {
+                            printf("here??\n");
+                            printf("a=%p, b=%p\n", (void*)a, (void*)b);
+                            const char* a_name = a->name;
+                            const char* b_name = b->name;
+                            int a_type = a->type;
+                            int b_type = b->type;
+                            printf("a->name=%s\n", a_name);
+                            printf("a type='%d'\n", a_type);
+                            printf("b type='%d'\n", b_type);
+                            // Always install boolean results as INT_CODE
+                            install($$, INT_CODE, 0);
+                            // But use float comparison if either operand is float
+                            if (a_type == FLOAT_CODE || b_type == FLOAT_CODE) {
                                 switch ($2) {
                                     case EQ:
-                                        fprintf (stdout, "REQL %s %s %s\n", $$, $1, $3);
+                                        fprintf (stdout, "REQL %s %s %s\n", $$, a_name, b_name);
                                         break;
                                     case NEQ:
-                                        fprintf (stdout, "RNQL %s %s %s\n", $$, $1, $3);
+                                        fprintf (stdout, "RNQL %s %s %s\n", $$, a_name, b_name);
                                         break;
                                     case LT:
-                                        fprintf (stdout, "RLSS %s %s %s\n", $$, $1, $3);
+                                        fprintf (stdout, "RLSS %s %s %s\n", $$, a_name, b_name);
                                         break;
                                     case GT:
-                                        fprintf (stdout, "RGRT %s %s %s\n", $$, $1, $3);
+                                        fprintf (stdout, "RGRT %s %s %s\n", $$, a_name, b_name);
                                         break;
-                                    // TODO: I think I haven't covered all of the cases here - need to check the docs
+                                    case GTE:
+                                        fprintf (stdout, "RGEQ %s %s %s\n", $$, a_name, b_name);
+                                        break;
+                                    case LTE:
+                                        fprintf (stdout, "RLEQ %s %s %s\n", $$, a_name, b_name);
+                                        break;
                                 }
                             } else {
                                 switch ($2) {
                                     case EQ:
-                                        fprintf (stdout, "IEQL %s %s %s\n", $$, $1, $3);
+                                        fprintf (stdout, "IEQL %s %s %s\n", $$, a_name, b_name);
                                         break;
                                     case NEQ:
-                                        fprintf (stdout, "INQL %s %s %s\n", $$, $1, $3);
+                                        fprintf (stdout, "INQL %s %s %s\n", $$, a_name, b_name);
                                         break;
                                     case LT:
-                                        fprintf (stdout, "ILSS %s %s %s\n", $$, $1, $3);
+                                        fprintf (stdout, "ILSS %s %s %s\n", $$, a_name, b_name);
                                         break;
                                     case GT:
-                                        fprintf (stdout, "IGRT %s %s %s\n", $$, $1, $3);
+                                        fprintf (stdout, "IGRT %s %s %s\n", $$, a_name, b_name);
+                                        break;
+                                    case GTE:
+                                        fprintf (stdout, "IGEQ %s %s %s\n", $$, a_name, b_name);
+                                        break;
+                                    case LTE:
+                                        fprintf (stdout, "ILEQ %s %s %s\n", $$, a_name, b_name);
                                         break;
                                 }
                             }
@@ -184,6 +334,10 @@ boolfactor      :   NOT '(' boolexpr ')' { }
 
 expression      :   expression ADDOP term
                     {
+                        if (tempCount >= MAX_TEMP) {
+                            fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
+                            YYERROR;
+                        }
                         sprintf($$, "T%d", tempCount++);
                         struct nlist* a = lookup($1);
                         struct nlist* b = lookup($3);
@@ -214,6 +368,10 @@ expression      :   expression ADDOP term
 
 term            :   term MULOP factor
                     {
+                        if (tempCount >= MAX_TEMP) {
+                            fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
+                            YYERROR;
+                        }
                         sprintf($$, "T%d", tempCount++);
                         struct nlist* a = lookup($1);
                         struct nlist* b = lookup($3);
@@ -250,6 +408,10 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                         if (var == NULL) {
                             fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
                         } else {
+                            if (tempCount >= MAX_TEMP) {
+                                fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
+                                YYERROR;
+                            }
                             sprintf($$, "T%d", tempCount++);
                             if ($1 == CASTI) {
                                 install($$, INT_CODE, (int)var->val);
@@ -258,9 +420,13 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                             }
                         }
                     }
-                |   ID
+                |   ID { strcpy($$, $1); }
                 |   NUM
                     {
+                        if (tempCount >= MAX_TEMP) {
+                            fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
+                            YYERROR;
+                        }
                         sprintf($$, "T%d", tempCount++);
                         if ($1.attr == INT_CODE) {
                             fprintf (stdout, "IASN %s %d\n", $$, (int)$1.val);
@@ -276,3 +442,4 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
 void yyerror (const char *s) {
     fprintf (stderr, "line %d: %s\n", yylineno, s);
 }
+
