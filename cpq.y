@@ -10,8 +10,6 @@
 
     void yyerror (const char *s);
 
-    // TODO: Should I limit the number of temporary variables?
-    #define MAX_TEMP 100
     int temp_count = 0;
 
     dict symbols_table;
@@ -173,10 +171,6 @@ stmtlist        :   stmtlist stmt
 boolexpr        :   boolexpr OR boolterm
                     {
                         printf("Processing OR operation\n");
-                        if (temp_count >= MAX_TEMP) {
-                            fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
-                            YYERROR;
-                        }
                         sprintf($$, "T%d", temp_count++);
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
@@ -198,10 +192,6 @@ boolexpr        :   boolexpr OR boolterm
 boolterm        :   boolterm AND boolfactor
                     {
                         printf("Processing AND operation\n");
-                        if (temp_count >= MAX_TEMP) {
-                            fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
-                            YYERROR;
-                        }
                         sprintf($$, "T%d", temp_count++);
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
@@ -223,10 +213,6 @@ boolterm        :   boolterm AND boolfactor
 boolfactor      :   NOT '(' boolexpr ')' { }
                 |   expression RELOP expression
                     {
-                        if (temp_count >= MAX_TEMP) {
-                            fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
-                            YYERROR;
-                        }
                         sprintf($$, "T%d", temp_count++);
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
@@ -291,10 +277,6 @@ boolfactor      :   NOT '(' boolexpr ')' { }
 
 expression      :   expression ADDOP term
                     {
-                        if (temp_count >= MAX_TEMP) {
-                            fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
-                            YYERROR;
-                        }
                         sprintf($$, "T%d", temp_count++);
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
@@ -325,10 +307,6 @@ expression      :   expression ADDOP term
 
 term            :   term MULOP factor
                     {
-                        if (temp_count >= MAX_TEMP) {
-                            fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
-                            YYERROR;
-                        }
                         sprintf($$, "T%d", temp_count++);
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
@@ -365,10 +343,6 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                         if (var == NULL) {
                             fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
                         } else {
-                            if (temp_count >= MAX_TEMP) {
-                                fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
-                                YYERROR;
-                            }
                             sprintf($$, "T%d", temp_count++);
                             if ($1 == CASTI) {
                                 install(symbols_table, $$, INT_CODE, (int)var->val);
@@ -380,10 +354,6 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                 |   ID { strcpy($$, $1); }
                 |   NUM
                     {
-                        if (temp_count >= MAX_TEMP) {
-                            fprintf(stderr, "line %d: Too many temporary variables!\n", yylineno);
-                            YYERROR;
-                        }
                         sprintf($$, "T%d", temp_count++);
                         if ($1.attr == INT_CODE) {
                             fprintf (stdout, "IASN %s %d\n", $$, (int)$1.val);
