@@ -16,11 +16,19 @@
 #define INT_CODE                22
 #define FLOAT_CODE              23
 
+// TODO: Move to own header file and include in c file
 typedef struct nlist { /* table entry: */
     struct nlist *next; /* next entry in chain */
     char *name; /* defined name */
     float val; /* replacement text */
     int type;
 } nlist;
+
+// TODO: Move to own header file and include in c file
+// Structure for holding a list node
+typedef struct list_node {
+    char* value;
+    struct list_node* next;
+} list_node;
 
 #endif // TYPES_H 

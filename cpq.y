@@ -4,7 +4,7 @@
     #include <string.h>
     #include "types.h"
     #include "dict.h"
-    
+
     extern int yylineno;
     extern struct nlist *hashtab;
 
@@ -18,21 +18,21 @@
     // TODO: Create a linked list file with appropriate header
 
     // Function implementations
-    struct id_list* new_id_node(const char* id) {
+    struct list_node* new_id_node(const char* id) {
         printf("Creating new node for ID: %s\n", id);
-        struct id_list* node = (struct id_list*)malloc(sizeof(struct id_list));
-        node->id = strdup(id);
+        struct list_node* node = (struct list_node*)malloc(sizeof(struct list_node));
+        node->value = strdup(id);
         node->next = NULL;
         return node;
     }
 
-    struct id_list* append_id(struct id_list* list, const char* id) {
+    struct list_node* append_id(struct list_node* list, const char* id) {
         printf("Appending ID: %s\n", id);
         if (list == NULL) {
             return new_id_node(id);
         }
         // Find the last node
-        struct id_list* current = list;
+        struct list_node* current = list;
         while (current->next != NULL) {
             current = current->next;
         }
@@ -41,11 +41,11 @@
         return list;
     }
 
-    void free_id_list(struct id_list* list) {
+    void free_id_list(struct list_node* list) {
         printf("Freeing list\n");
         if (list == NULL) return;
-        printf("Freeing node with ID: %s\n", list->id);
-        struct id_list* next = list->next;  // Save next pointer before freeing
+        printf("Freeing node with ID: %s\n", list->value);
+        struct list_node* next = list->next;  // Save next pointer before freeing
         // Don't free list->id since it's now owned by the hash table
         free(list);  // Only free the list node
         free_id_list(next);  // Process the rest of the list
@@ -58,22 +58,16 @@
         float val;
     };
 
-    // Structure for holding a list of IDs
-    struct id_list {
-        char* id;
-        struct id_list* next;
-    };
-
     // Function declarations
-    struct id_list* new_id_node(const char* id);
-    struct id_list* append_id(struct id_list* list, const char* id);
+    struct list_node* new_id_node(const char* id);
+    struct list_node* append_id(struct list_node* list, const char* id);
 }
 
 %union {
     int attr;
     struct number num;
     char id [50];
-    struct id_list* id_list;
+    struct list_node* id_list;
 }
 
 %define parse.error verbose
@@ -100,7 +94,7 @@
 %token <num> NUM
 
 %type <id> factor expression term boolfactor boolexpr boolterm
-%type <attr> type declaration
+%type <attr> type
 %type <id_list> idlist
 
 %%
@@ -116,15 +110,14 @@ declaration     :   idlist ':' type ';'
                     {
                         printf("Processing declaration with type: %d\n", $3);
                         // Install all IDs with the type
-                        struct id_list* current = $1;
+                        struct list_node* current = $1;
                         while (current != NULL) {
-                            printf("Installing ID: %s with type: %d and value: %f\n", current->id, $3, 1.0);
-                            install(current->id, $3, 1.0);
+                            printf("Installing ID: %s with type: %d and value: %f\n", current->value, $3, 1.0);
+                            install(current->value, $3, 1.0);
                             current = current->next;
                         }
                         free_id_list($1);  // Free the list after we're done
-                        printf("List freed, setting declaration type to: %d\n", $3);
-                        $$ = $3;
+                        printf("List freed\n");
                         printf("Declaration complete\n");
                     }
                 ;
@@ -266,58 +259,50 @@ boolfactor      :   NOT '(' boolexpr ')' { }
                         struct nlist* a = lookup($1);
                         struct nlist* b = lookup($3);
                         if (a != NULL && b != NULL) {
-                            printf("here??\n");
-                            printf("a=%p, b=%p\n", (void*)a, (void*)b);
-                            const char* a_name = a->name;
-                            const char* b_name = b->name;
-                            int a_type = a->type;
-                            int b_type = b->type;
-                            printf("a->name=%s\n", a_name);
-                            printf("a type='%d'\n", a_type);
-                            printf("b type='%d'\n", b_type);
+                            // printf("a=%p, b=%p\n", (void*)a, (void*)b);
                             // Always install boolean results as INT_CODE
                             install($$, INT_CODE, 0);
                             // But use float comparison if either operand is float
-                            if (a_type == FLOAT_CODE || b_type == FLOAT_CODE) {
+                            if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
                                 switch ($2) {
                                     case EQ:
-                                        fprintf (stdout, "REQL %s %s %s\n", $$, a_name, b_name);
+                                        fprintf (stdout, "REQL %s %s %s\n", $$, a->name, b->name);
                                         break;
                                     case NEQ:
-                                        fprintf (stdout, "RNQL %s %s %s\n", $$, a_name, b_name);
+                                        fprintf (stdout, "RNQL %s %s %s\n", $$, a->name, b->name);
                                         break;
                                     case LT:
-                                        fprintf (stdout, "RLSS %s %s %s\n", $$, a_name, b_name);
+                                        fprintf (stdout, "RLSS %s %s %s\n", $$, a->name, b->name);
                                         break;
                                     case GT:
-                                        fprintf (stdout, "RGRT %s %s %s\n", $$, a_name, b_name);
+                                        fprintf (stdout, "RGRT %s %s %s\n", $$, a->name, b->name);
                                         break;
                                     case GTE:
-                                        fprintf (stdout, "RGEQ %s %s %s\n", $$, a_name, b_name);
+                                        fprintf (stdout, "RGEQ %s %s %s\n", $$, a->name, b->name);
                                         break;
                                     case LTE:
-                                        fprintf (stdout, "RLEQ %s %s %s\n", $$, a_name, b_name);
+                                        fprintf (stdout, "RLEQ %s %s %s\n", $$, a->name, b->name);
                                         break;
                                 }
                             } else {
                                 switch ($2) {
                                     case EQ:
-                                        fprintf (stdout, "IEQL %s %s %s\n", $$, a_name, b_name);
+                                        fprintf (stdout, "IEQL %s %s %s\n", $$, a->name, b->name);
                                         break;
                                     case NEQ:
-                                        fprintf (stdout, "INQL %s %s %s\n", $$, a_name, b_name);
+                                        fprintf (stdout, "INQL %s %s %s\n", $$, a->name, b->name);
                                         break;
                                     case LT:
-                                        fprintf (stdout, "ILSS %s %s %s\n", $$, a_name, b_name);
+                                        fprintf (stdout, "ILSS %s %s %s\n", $$, a->name, b->name);
                                         break;
                                     case GT:
-                                        fprintf (stdout, "IGRT %s %s %s\n", $$, a_name, b_name);
+                                        fprintf (stdout, "IGRT %s %s %s\n", $$, a->name, b->name);
                                         break;
                                     case GTE:
-                                        fprintf (stdout, "IGEQ %s %s %s\n", $$, a_name, b_name);
+                                        fprintf (stdout, "IGEQ %s %s %s\n", $$, a->name, b->name);
                                         break;
                                     case LTE:
-                                        fprintf (stdout, "ILEQ %s %s %s\n", $$, a_name, b_name);
+                                        fprintf (stdout, "ILEQ %s %s %s\n", $$, a->name, b->name);
                                         break;
                                 }
                             }
