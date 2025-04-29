@@ -1,3 +1,6 @@
+#ifndef TYPES_H
+#define TYPES_H
+
 #define EQ                      10
 #define NEQ                     11
 #define LT                      12
@@ -13,9 +16,4 @@
 #define INT_CODE                22
 #define FLOAT_CODE              23
 
-struct nlist { /* table entry: */
-    struct nlist *next; /* next entry in chain */
-    char *name; /* defined name */
-    float val; /* replacement text */
-    int type;
-};
+#endif // TYPES_H
