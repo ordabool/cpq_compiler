@@ -30,6 +30,21 @@ struct linked_list* append_value(struct linked_list* list, const char* value) {
     return list;
 }
 
+struct linked_list* append_linked_list(struct linked_list* list, struct linked_list* list_to_append) {
+    printf("Appending linked list\n");
+    if (list == NULL) {
+        return list_to_append;
+    }
+    if (list_to_append == NULL) {
+        return list;
+    }
+
+    list->tail->next = list_to_append->head;
+    list->tail = list_to_append->tail;
+    free(list_to_append);
+    return list;
+}
+
 void free_linked_list(struct linked_list* list) {
     printf("Freeing linked list\n");
     if (list == NULL) return;
@@ -46,3 +61,23 @@ void free_list_nodes(struct list_node* node) {
     free(node);
     free_list_nodes(next);
 }
+
+void print_linked_list(struct linked_list* list) {
+    // printf("Printing linked list:\n");
+    struct list_node* current = list->head;
+    while (current != NULL) {
+        printf("%s\n", current->value);
+        current = current->next;
+    }
+}
+
+int count_linked_list(struct linked_list* list) {
+    int count = 0;
+    struct list_node* current = list->head;
+    while (current != NULL) {
+        count++;
+        current = current->next;
+    }
+    return count;
+}
+

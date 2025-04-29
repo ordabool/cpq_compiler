@@ -6,12 +6,10 @@
     #include "dict.h"
     #include "linked_list.h"
 
-    extern int yylineno;
-
     void yyerror (const char *s);
 
+    extern int yylineno;
     int temp_count = 0;
-
     dict symbols_table;
 }
 
@@ -27,6 +25,7 @@
     struct number num;
     char id [50];
     struct linked_list* id_list;
+    struct linked_list* commands;
 }
 
 %define parse.error verbose
@@ -55,25 +54,34 @@
 %type <id> factor expression term boolfactor boolexpr boolterm
 %type <attr> type
 %type <id_list> idlist
+%type <commands> stmt_block input_stmt stmtlist stmt
 
 %%
 
 program         :   declarations stmt_block
                     {
-                        printf("Program complete\n");
+                        printf("Program complete, cleaning up..\n");
 
                         printf("\nSymbols table:\n");
                         print_dict(symbols_table);
-                        printf("\n");
-
-                        // Free the symbols table
                         free_dict(symbols_table);
                         printf("Symbols table freed\n");
+
+                        printf("\nTotal commands: %d\n", count_linked_list($2));
+
+                        printf("\nCommands:\n");
+                        print_linked_list($2);
+                        printf("\n");
+                        free_linked_list($2);
+                        printf("Commands freed\n");
                     }
                 ;
 
 declarations    :   declarations declaration
-                |   /* empty */
+                    {
+                        printf("Processing declarations\n");
+                    }
+                |   /* empty */ 
                 ;
 
 declaration     :   idlist ':' type ';'
@@ -108,13 +116,13 @@ idlist          :   idlist ',' ID
                     }
                 ;
 
-stmt            :   assignment_stmt
+stmt            :   assignment_stmt { $$ = NULL; }
                 |   input_stmt
-                |   output_stmt
-                |   if_stmt
-                |   while_stmt
-                |   switch_stmt
-                |   break_stmt
+                |   output_stmt { $$ = NULL; }
+                |   if_stmt { $$ = NULL; }
+                |   while_stmt { $$ = NULL; }
+                |   switch_stmt { $$ = NULL; }
+                |   break_stmt { $$ = NULL; }
                 |   stmt_block
                 ;
 
@@ -130,6 +138,24 @@ assignment_stmt :   ID '=' expression ';'
                 ;
 
 input_stmt      :   INPUT '(' ID ')' ';'
+                    {
+                        printf("Processing input statement for variable: %s\n", $3);
+
+                        struct dict_item* var = lookup(symbols_table, $3);
+
+                        if (var == NULL) {
+                            fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                        } else {
+                            char command[100];
+                            if (var->type == INT_CODE) {
+                                sprintf(command, "IINP %s", $3);
+                            } else {
+                                sprintf(command, "RINP %s", $3);
+                            }
+                            $$ = new_linked_list(command);
+                            printf("Processing input statement for variable: %s\n", $3);
+                        }
+                    }
                 ;
 
 output_stmt     :   OUTPUT '(' expression ')' ';'
@@ -161,11 +187,11 @@ caselist        :   caselist CASE NUM ':' stmtlist
 break_stmt      :   BREAK ';'
                 ;
 
-stmt_block      :   '{' stmtlist '}'
+stmt_block      :   '{' stmtlist '}' { $$ = $2; }
                 ;
 
-stmtlist        :   stmtlist stmt
-                |   /* empty */
+stmtlist        :   stmtlist stmt { $$ = append_linked_list($1, $2); }
+                |   /* empty */ { $$ = NULL; }
                 ;
 
 boolexpr        :   boolexpr OR boolterm
