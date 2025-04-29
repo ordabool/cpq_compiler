@@ -24,11 +24,4 @@ typedef struct nlist { /* table entry: */
     int type;
 } nlist;
 
-// TODO: Move to own header file and include in c file
-// Structure for holding a list node
-typedef struct list_node {
-    char* value;
-    struct list_node* next;
-} list_node;
-
 #endif // TYPES_H 

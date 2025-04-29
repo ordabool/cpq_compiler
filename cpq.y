@@ -4,6 +4,7 @@
     #include <string.h>
     #include "types.h"
     #include "dict.h"
+    #include "linked_list.h"
 
     extern int yylineno;
     extern struct nlist *hashtab;
@@ -14,42 +15,6 @@
 
     int tempCount = 0;
     int labelCount = 0;
-
-    // TODO: Create a linked list file with appropriate header
-
-    // Function implementations
-    struct list_node* new_id_node(const char* id) {
-        printf("Creating new node for ID: %s\n", id);
-        struct list_node* node = (struct list_node*)malloc(sizeof(struct list_node));
-        node->value = strdup(id);
-        node->next = NULL;
-        return node;
-    }
-
-    struct list_node* append_id(struct list_node* list, const char* id) {
-        printf("Appending ID: %s\n", id);
-        if (list == NULL) {
-            return new_id_node(id);
-        }
-        // Find the last node
-        struct list_node* current = list;
-        while (current->next != NULL) {
-            current = current->next;
-        }
-        // Append the new node
-        current->next = new_id_node(id);
-        return list;
-    }
-
-    void free_id_list(struct list_node* list) {
-        printf("Freeing list\n");
-        if (list == NULL) return;
-        printf("Freeing node with ID: %s\n", list->value);
-        struct list_node* next = list->next;  // Save next pointer before freeing
-        // Don't free list->id since it's now owned by the hash table
-        free(list);  // Only free the list node
-        free_id_list(next);  // Process the rest of the list
-    }
 }
 
 %code requires {
@@ -57,17 +22,13 @@
         int attr; // Type (INT_CODE, FLOAT_CODE, etc.)
         float val;
     };
-
-    // Function declarations
-    struct list_node* new_id_node(const char* id);
-    struct list_node* append_id(struct list_node* list, const char* id);
 }
 
 %union {
     int attr;
     struct number num;
     char id [50];
-    struct list_node* id_list;
+    struct linked_list* id_list;
 }
 
 %define parse.error verbose
@@ -110,13 +71,13 @@ declaration     :   idlist ':' type ';'
                     {
                         printf("Processing declaration with type: %d\n", $3);
                         // Install all IDs with the type
-                        struct list_node* current = $1;
+                        struct list_node* current = $1->head;
                         while (current != NULL) {
                             printf("Installing ID: %s with type: %d and value: %f\n", current->value, $3, 1.0);
                             install(current->value, $3, 1.0);
                             current = current->next;
                         }
-                        free_id_list($1);  // Free the list after we're done
+                        free_linked_list($1);
                         printf("List freed\n");
                         printf("Declaration complete\n");
                     }
@@ -129,12 +90,12 @@ type            :   INT { $$ = INT_CODE; }
 idlist          :   idlist ',' ID
                     {
                         printf("Processing multiple IDs, current ID: %s\n", $3);
-                        $$ = append_id($1, $3);
+                        $$ = append_value($1, $3);
                     }
                 |   ID
                     {
                         printf("Processing single ID: %s\n", $1);
-                        $$ = new_id_node($1);
+                        $$ = new_linked_list($1);
                     }
                 ;
 
