@@ -11,6 +11,7 @@
     extern int yylineno;
     int temp_count = 0;
     dict symbols_table;
+    struct linked_list* gencmds = NULL;
 }
 
 %code requires {
@@ -60,6 +61,7 @@
 
 program         :   declarations stmt_block
                     {
+                        printf("\n---------------------------------------------\n");
                         printf("Program complete, cleaning up..\n");
 
                         printf("\nSymbols table:\n");
@@ -69,34 +71,30 @@ program         :   declarations stmt_block
 
                         printf("\nTotal commands: %d\n", count_linked_list($2));
 
-                        printf("\nCommands:\n");
+                        printf("---------------------------------------------\n\n");
                         print_linked_list($2);
+
+                        printf("---------------------------------------------\n\n");
+                        print_linked_list(gencmds);
+
                         printf("\n");
                         free_linked_list($2);
-                        printf("Commands freed\n");
                     }
                 ;
 
 declarations    :   declarations declaration
-                    {
-                        printf("Processing declarations\n");
-                    }
-                |   /* empty */ 
+                |   /* empty */
                 ;
 
 declaration     :   idlist ':' type ';'
                     {
-                        printf("Processing declaration with type: %d\n", $3);
                         // Install all IDs with the type
                         struct list_node* current = $1->head;
                         while (current != NULL) {
-                            printf("Installing ID: %s with type: %d and value: %f\n", current->value, $3, 1.0);
                             install(symbols_table, current->value, $3, 1.0);
                             current = current->next;
                         }
                         free_linked_list($1);
-                        printf("List freed\n");
-                        printf("Declaration complete\n");
                     }
                 ;
 
@@ -106,12 +104,10 @@ type            :   INT { $$ = INT_CODE; }
 
 idlist          :   idlist ',' ID
                     {
-                        printf("Processing multiple IDs, current ID: %s\n", $3);
                         $$ = append_value($1, $3);
                     }
                 |   ID
                     {
-                        printf("Processing single ID: %s\n", $1);
                         $$ = new_linked_list($1);
                     }
                 ;
@@ -127,7 +123,7 @@ stmt            :   assignment_stmt { $$ = NULL; }
                 ;
 
 assignment_stmt :   ID '=' expression ';'
-                    { 
+                    {
                         struct dict_item* var = lookup(symbols_table, $1);
                         if (var == NULL) {
                             fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
@@ -139,12 +135,11 @@ assignment_stmt :   ID '=' expression ';'
 
 input_stmt      :   INPUT '(' ID ')' ';'
                     {
-                        printf("Processing input statement for variable: %s\n", $3);
-
                         struct dict_item* var = lookup(symbols_table, $3);
 
                         if (var == NULL) {
                             fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            $$ = NULL;
                         } else {
                             char command[100];
                             if (var->type == INT_CODE) {
@@ -152,8 +147,8 @@ input_stmt      :   INPUT '(' ID ')' ';'
                             } else {
                                 sprintf(command, "RINP %s", $3);
                             }
+                            gencmds = append_value(gencmds, command);
                             $$ = new_linked_list(command);
-                            printf("Processing input statement for variable: %s\n", $3);
                         }
                     }
                 ;
@@ -163,13 +158,9 @@ output_stmt     :   OUTPUT '(' expression ')' ';'
 
 if_stmt         :   IF '(' boolexpr ')' stmt ELSE stmt
                     {
-                        printf("Processing if statement with condition: %s\n", $3);
                         struct dict_item* cond = lookup(symbols_table, $3);
                         if (cond == NULL) {
                             fprintf(stderr, "line %d: Internal error: boolean result not found\n", yylineno);
-                            YYERROR;
-                        } else {
-                            printf("Found condition variable with type %d\n", cond->type);
                         }
                     }
                 ;
