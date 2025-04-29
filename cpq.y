@@ -11,7 +11,7 @@
     extern int yylineno;
     int temp_count = 0;
     dict symbols_table;
-    struct linked_list* gencmds = NULL;
+    struct linked_list* generated_commands = NULL;
 }
 
 %code requires {
@@ -26,7 +26,6 @@
     struct number num;
     char id [50];
     struct linked_list* id_list;
-    struct linked_list* commands;
 }
 
 %define parse.error verbose
@@ -55,7 +54,6 @@
 %type <id> factor expression term boolfactor boolexpr boolterm
 %type <attr> type
 %type <id_list> idlist
-%type <commands> stmt_block input_stmt stmtlist stmt
 
 %%
 
@@ -69,16 +67,13 @@ program         :   declarations stmt_block
                         free_dict(symbols_table);
                         printf("Symbols table freed\n");
 
-                        printf("\nTotal commands: %d\n", count_linked_list($2));
+                        printf("\nTotal commands: %d\n", count_linked_list(generated_commands));
 
                         printf("---------------------------------------------\n\n");
-                        print_linked_list($2);
-
-                        printf("---------------------------------------------\n\n");
-                        print_linked_list(gencmds);
+                        print_linked_list(generated_commands);
 
                         printf("\n");
-                        free_linked_list($2);
+                        free_linked_list(generated_commands);
                     }
                 ;
 
@@ -112,13 +107,13 @@ idlist          :   idlist ',' ID
                     }
                 ;
 
-stmt            :   assignment_stmt { $$ = NULL; }
+stmt            :   assignment_stmt
                 |   input_stmt
-                |   output_stmt { $$ = NULL; }
-                |   if_stmt { $$ = NULL; }
-                |   while_stmt { $$ = NULL; }
-                |   switch_stmt { $$ = NULL; }
-                |   break_stmt { $$ = NULL; }
+                |   output_stmt
+                |   if_stmt
+                |   while_stmt
+                |   switch_stmt
+                |   break_stmt
                 |   stmt_block
                 ;
 
@@ -139,7 +134,6 @@ input_stmt      :   INPUT '(' ID ')' ';'
 
                         if (var == NULL) {
                             fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
-                            $$ = NULL;
                         } else {
                             char command[100];
                             if (var->type == INT_CODE) {
@@ -147,8 +141,7 @@ input_stmt      :   INPUT '(' ID ')' ';'
                             } else {
                                 sprintf(command, "RINP %s", $3);
                             }
-                            gencmds = append_value(gencmds, command);
-                            $$ = new_linked_list(command);
+                            generated_commands = append_value(generated_commands, command);
                         }
                     }
                 ;
@@ -178,11 +171,11 @@ caselist        :   caselist CASE NUM ':' stmtlist
 break_stmt      :   BREAK ';'
                 ;
 
-stmt_block      :   '{' stmtlist '}' { $$ = $2; }
+stmt_block      :   '{' stmtlist '}'
                 ;
 
-stmtlist        :   stmtlist stmt { $$ = append_linked_list($1, $2); }
-                |   /* empty */ { $$ = NULL; }
+stmtlist        :   stmtlist stmt
+                |   /* empty */
                 ;
 
 boolexpr        :   boolexpr OR boolterm
