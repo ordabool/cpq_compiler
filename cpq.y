@@ -225,68 +225,94 @@ boolterm        :   boolterm AND boolfactor
                 |   boolfactor { strcpy($$, $1); }
                 ;
 
-boolfactor      :   NOT '(' boolexpr ')' { }
+boolfactor      :   NOT '(' boolexpr ')'
+                    {
+                        struct dict_item* var = lookup(symbols_table, $3);
+                        if (var != NULL) {
+                            sprintf($$, "T%d", temp_count++);
+                            char command[COMMAND_LENGTH];
+
+                            // Using (1.0 - var->val) to invert the boolean value of var
+                            float res = var->is_const ? 1.0 - var->val : NO_VAL;
+
+                            install(symbols_table, $$, BOOL_CODE, res, var->is_const);
+                            // TODO: This is not a valid command in the assignment - need to fix - maybe ask about it
+                            sprintf(command, "NOT %s %s", $$, $3);
+                            append_value(generated_commands, command);
+                        } else {
+                            fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            strcpy($$, $3);
+                        }
+                    }
                 |   expression RELOP expression
                     {
-                        sprintf($$, "T%d", temp_count++);
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
+                            sprintf($$, "T%d", temp_count++);
                             char command[COMMAND_LENGTH];
-                            // printf("a=%p, b=%p\n", (void*)a, (void*)b);
-                            // Always install boolean results as INT_CODE
-                            install(symbols_table, $$, INT_CODE, 0, false);
-                            // But use float comparison if either operand is float
-                            if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
-                                switch ($2) {
-                                    case EQ:
-                                        sprintf(command, "REQL %s %s %s", $$, a->name, b->name);
-                                        break;
-                                    case NEQ:
-                                        sprintf(command, "RNQL %s %s %s", $$, a->name, b->name);
-                                        break;
-                                    case LT:
-                                        sprintf(command, "RLSS %s %s %s", $$, a->name, b->name);
-                                        break;
-                                    case GT:
-                                        sprintf(command, "RGRT %s %s %s", $$, a->name, b->name);
-                                        break;
-                                    case GTE:
-                                        sprintf(command, "RGEQ %s %s %s", $$, a->name, b->name);
-                                        break;
-                                    case LTE:
-                                        sprintf(command, "RLEQ %s %s %s", $$, a->name, b->name);
-                                        break;
-                                }
-                            } else {
-                                switch ($2) {
-                                    case EQ:
-                                        sprintf(command, "IEQL %s %s %s", $$, a->name, b->name);
-                                        break;
-                                    case NEQ:
-                                        sprintf(command, "INQL %s %s %s", $$, a->name, b->name);
-                                        break;
-                                    case LT:
-                                        sprintf(command, "ILSS %s %s %s", $$, a->name, b->name);
-                                        break;
-                                    case GT:
-                                        sprintf(command, "IGRT %s %s %s", $$, a->name, b->name);
-                                        break;
-                                    case GTE:
-                                        sprintf(command, "IGEQ %s %s %s", $$, a->name, b->name);
-                                        break;
-                                    case LTE:
-                                        sprintf(command, "ILEQ %s %s %s", $$, a->name, b->name);
-                                        break;
-                                }
+                            bool is_const = a->is_const && b->is_const;
+
+                            float res = NO_VAL;
+                            switch ($2) {
+                                case EQ:
+                                    res = is_const ? a->val == b->val : NO_VAL;
+                                    sprintf(command, "XEQL");
+                                    break;
+                                case NEQ:
+                                    res = is_const ? a->val != b->val : NO_VAL;
+                                    sprintf(command, "XNQL");
+                                    break;
+                                case LT:
+                                    res = is_const ? a->val < b->val : NO_VAL;
+                                    sprintf(command, "XLSS");
+                                    break;
+                                case GT:
+                                    res = is_const ? a->val > b->val : NO_VAL;
+                                    sprintf(command, "XGRT");
+                                    break;
+                                case GTE:
+                                    res = is_const ? a->val >= b->val : NO_VAL;
+                                    sprintf(command, "XGEQ");
+                                    break;
+                                case LTE:
+                                    res = is_const ? a->val <= b->val : NO_VAL;
+                                    sprintf(command, "XLEQ");
+                                    break;
                             }
-                            generated_commands = append_value(generated_commands, command);
+
+                            if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
+                                command[0] = 'R';
+                                if (a->type == INT_CODE) {
+                                    char cast_command[COMMAND_LENGTH];
+                                    sprintf(cast_command, "ITOR %s %s", $$, a->name);
+                                    append_value(generated_commands, cast_command);
+                                    a = install(symbols_table, $$, FLOAT_CODE, a->val, is_const);
+                                    sprintf($$, "T%d", temp_count++);
+                                }
+                                if (b->type == INT_CODE) {
+                                    char cast_command[COMMAND_LENGTH];
+                                    sprintf(cast_command, "ITOR %s %s", $$, a->name);
+                                    append_value(generated_commands, cast_command);
+                                    b = install(symbols_table, $$, FLOAT_CODE, b->val, is_const);
+                                    sprintf($$, "T%d", temp_count++);
+                                }
+                                install(symbols_table, $$, BOOL_CODE, res, is_const);
+                            } else {
+                                command[0] = 'I';
+                                install(symbols_table, $$, BOOL_CODE, (int)res, is_const);
+                            }
+
+                            sprintf(command + strlen(command), " %s %s %s", $$, a->name, b->name);
+                            append_value(generated_commands, command);
                         } else {
                             if (a == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                strcpy($$, $3);
                             }
                             if (b == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                strcpy($$, $1);
                             }
                         }
                     }
@@ -302,18 +328,16 @@ expression      :   expression ADDOP term
                             bool is_const = a->is_const && b->is_const;
 
                             float res = NO_VAL;
-                            if (is_const) {
-                                if ($2 == ADD) {
-                                    res = a->val + b->val;
-                                    sprintf(command, "XADD");
-                                } else {
-                                    res = a->val - b->val;
-                                    sprintf(command, "XSUB");
-                                }
+                            if ($2 == ADD) {
+                                res = is_const ? a->val + b->val : NO_VAL;
+                                sprintf(command, "XADD");
+                            } else {
+                                res = is_const ? a->val - b->val : NO_VAL;
+                                sprintf(command, "XSUB");
                             }
 
                             if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
-                                command[0] = 'F';
+                                command[0] = 'R';
                                 if (a->type == INT_CODE) {
                                     char cast_command[COMMAND_LENGTH];
                                     sprintf(cast_command, "ITOR %s %s", $$, a->name);
@@ -364,18 +388,16 @@ term            :   term MULOP factor
                                 bool is_const = a->is_const && b->is_const;
 
                                 float res = NO_VAL;
-                                if (is_const) {
-                                    if ($2 == MUL) {
-                                        res = a->val * b->val;
-                                        sprintf(command, "XMLT");
-                                    } else {
-                                        res = a->val / b->val;
-                                        sprintf(command, "XDIV");
-                                    }
+                                if ($2 == MUL) {
+                                    res = is_const ? a->val * b->val : NO_VAL;
+                                    sprintf(command, "XMLT");
+                                } else {
+                                    res = is_const ? a->val / b->val : NO_VAL;
+                                    sprintf(command, "XDIV");
                                 }
 
                                 if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
-                                    command[0] = 'F';
+                                    command[0] = 'R';
                                     if (a->type == INT_CODE) {
                                         char cast_command[COMMAND_LENGTH];
                                         sprintf(cast_command, "ITOR %s %s", $$, a->name);
