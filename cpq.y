@@ -13,7 +13,7 @@
     dict symbols_table;
     struct linked_list* generated_commands = NULL;
     #define NO_VAL -1
-    #define COMMAND_LENGTH 100
+    #define COMMAND_LENGTH 150
 }
 
 %code requires {
@@ -370,15 +370,21 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                     {
                         struct dict_item* var = lookup(symbols_table, $3);
                         if (var == NULL) {
-                            // TODO: is this needed? I think it will log the error twice
-                            // TODO: and if it's needed, it should be checked for other productions of factor
                             fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
                         } else {
-                            sprintf($$, "T%d", temp_count++);
-                            if ($1 == CASTI) {
+                            char command[COMMAND_LENGTH];
+                            if (var->type == INT_CODE && $1 == CASTF) {
+                                sprintf($$, "T%d", temp_count++);
+                                sprintf(command, "ITOR %s %s", $$, $3);
+                                append_value(generated_commands, command);
                                 install(symbols_table, $$, INT_CODE, (int)var->val, false);
-                            } else {
+                            } else if (var->type == FLOAT_CODE && $1 == CASTI) {
+                                sprintf($$, "T%d", temp_count++);
+                                sprintf(command, "RTOI %s %s", $$, $3);
+                                append_value(generated_commands, command);
                                 install(symbols_table, $$, FLOAT_CODE, var->val, false);
+                            } else {
+                                strcpy($$, $3);
                             }
                         }
                     }
