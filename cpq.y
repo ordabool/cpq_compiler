@@ -386,7 +386,15 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                 |   NUM
                     {
                         sprintf($$, "T%d", temp_count++);
-                        install(symbols_table, $$, $1.attr, $1.val, true);
+                        char command[COMMAND_LENGTH];
+                        if ($1.attr == FLOAT_CODE) {
+                            sprintf(command, "RASN %s %f", $$, $1.val);
+                            install(symbols_table, $$, FLOAT_CODE, $1.val, true);
+                        } else {
+                            sprintf(command, "IASN %s %d", $$, (int)$1.val);
+                            install(symbols_table, $$, INT_CODE, (int)$1.val, true);
+                        }
+                        append_value(generated_commands, command);
                     }
                 ;
 
