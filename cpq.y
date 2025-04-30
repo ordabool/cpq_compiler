@@ -12,6 +12,8 @@
     int temp_count = 0;
     dict symbols_table;
     struct linked_list* generated_commands = NULL;
+    #define NO_VAL -1
+    #define COMMAND_LENGTH 100
 }
 
 %code requires {
@@ -59,6 +61,8 @@
 
 program         :   declarations stmt_block
                     {
+                        append_value(generated_commands, "HALT");
+
                         printf("\n---------------------------------------------\n");
                         printf("Program complete, cleaning up..\n");
 
@@ -86,7 +90,7 @@ declaration     :   idlist ':' type ';'
                         // Install all IDs with the type
                         struct list_node* current = $1->head;
                         while (current != NULL) {
-                            install(symbols_table, current->value, $3, 1.0, false);
+                            install(symbols_table, current->value, $3, NO_VAL, false);
                             current = current->next;
                         }
                         free_linked_list($1);
@@ -135,7 +139,7 @@ input_stmt      :   INPUT '(' ID ')' ';'
                         if (var == NULL) {
                             fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
                         } else {
-                            char command[100];
+                            char command[COMMAND_LENGTH];
                             if (var->type == INT_CODE) {
                                 sprintf(command, "IINP %s", $3);
                             } else {
@@ -227,7 +231,7 @@ boolfactor      :   NOT '(' boolexpr ')' { }
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
-                            char command[100];
+                            char command[COMMAND_LENGTH];
                             // printf("a=%p, b=%p\n", (void*)a, (void*)b);
                             // Always install boolean results as INT_CODE
                             install(symbols_table, $$, INT_CODE, 0, false);
@@ -307,10 +311,10 @@ expression      :   expression ADDOP term
                             }
                         } else {
                             if (a == NULL) {
-                                fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
                             }
                             if (b == NULL) {
-                                fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
                             }
                         }
                     }
@@ -319,29 +323,42 @@ expression      :   expression ADDOP term
 
 term            :   term MULOP factor
                     {
-                        sprintf($$, "T%d", temp_count++);
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
-                            // TODO: Why the fuck am I calculating the val? it's only good for constants! - should probably remove throughout everything
-                            float res;
-                            if ($2 == MUL) {
-                                res = a->val * b->val;
-                            } else {
-                                res = a->val / b->val;
+                            sprintf($$, "T%d", temp_count++);
+                            char command[COMMAND_LENGTH];
+                            bool is_const = a->is_const && b->is_const;
+
+                            float res = NO_VAL;
+                            if (is_const) {
+                                if ($2 == MUL) {
+                                    res = a->val * b->val;
+                                    sprintf(command, "XMLT");
+                                } else {
+                                    // TODO: Check for division by zero
+                                    res = a->val / b->val;
+                                    sprintf(command, "XDIV");
+                                }
                             }
 
                             if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
-                                install(symbols_table, $$, FLOAT_CODE, res, false);
+                                command[0] = 'F';
+                                // TODO: Add casts if needed
+                                install(symbols_table, $$, FLOAT_CODE, res, is_const);
                             } else {
-                                install(symbols_table, $$, INT_CODE, (int)res, false);
+                                command[0] = 'I';
+                                install(symbols_table, $$, INT_CODE, (int)res, is_const);
                             }
+
+                            sprintf(command + strlen(command), " %s %s %s", $$, a->name, b->name);
+                            append_value(generated_commands, command);
                         } else {
                             if (a == NULL) {
-                                fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
                             }
                             if (b == NULL) {
-                                fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
                             }
                         }
                     }
@@ -353,7 +370,9 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                     {
                         struct dict_item* var = lookup(symbols_table, $3);
                         if (var == NULL) {
-                            fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            // TODO: is this needed? I think it will log the error twice
+                            // TODO: and if it's needed, it should be checked for other productions of factor
+                            fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
                         } else {
                             sprintf($$, "T%d", temp_count++);
                             if ($1 == CASTI) {
@@ -367,11 +386,6 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                 |   NUM
                     {
                         sprintf($$, "T%d", temp_count++);
-                        if ($1.attr == INT_CODE) {
-                            fprintf (stdout, "IASN %s %d\n", $$, (int)$1.val);
-                        } else {
-                            fprintf (stdout, "RASN %s %f\n", $$, $1.val);
-                        }
                         install(symbols_table, $$, $1.attr, $1.val, true);
                     }
                 ;

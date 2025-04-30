@@ -1,9 +1,12 @@
 /* Finding minimum between two numbers */
 a, b: float;
+c: int;
 
 {
     input(a);
     input(b);
+
+    c = 3 * 2;
 
     if (a < b)
         output(a);

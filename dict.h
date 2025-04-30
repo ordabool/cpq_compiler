@@ -12,6 +12,7 @@ typedef struct dict_item {
     char* name;
     float val;
     int type;
+    bool is_const;
 } dict_item;
 
 #define HASHSIZE 101
