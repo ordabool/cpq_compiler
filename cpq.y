@@ -13,7 +13,7 @@
     dict symbols_table;
     struct linked_list* generated_commands = NULL;
     #define NO_VAL -1
-    #define COMMAND_LENGTH 150
+    #define COMMAND_LENGTH 200
 }
 
 %code requires {
@@ -185,7 +185,8 @@ stmtlist        :   stmtlist stmt
 
 boolexpr        :   boolexpr OR boolterm
                     {
-                        printf("Processing OR operation\n");
+                        // TODO: use this logic for OR:
+                        // (a + b) > 0 ? 1 : 0;
                         sprintf($$, "T%d", temp_count++);
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
@@ -201,28 +202,35 @@ boolexpr        :   boolexpr OR boolterm
                             }
                         }
                     }
-                |   boolterm { strcpy($$, $1); }
+                |   boolterm
                 ;
 
 boolterm        :   boolterm AND boolfactor
                     {
-                        printf("Processing AND operation\n");
-                        sprintf($$, "T%d", temp_count++);
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
-                            install(symbols_table, $$, INT_CODE, 0, false);
-                            fprintf(stdout, "AND %s %s %s\n", $$, $1, $3);
+                            sprintf($$, "T%d", temp_count++);
+                            char command[COMMAND_LENGTH];
+                            bool is_const = a->is_const && b->is_const;
+
+                            // multiply the boolean values to get the && result
+                            float res = is_const ? a->val * b->val : NO_VAL;
+                            sprintf(command, "IADD %s %s %s", $$, $1, $3);
+                            install(symbols_table, $$, INT_CODE, (int)res, is_const);
+                            append_value(generated_commands, command);
                         } else {
                             if (a == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                strcpy($$, $3);
                             }
                             if (b == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                strcpy($$, $1);
                             }
                         }
                     }
-                |   boolfactor { strcpy($$, $1); }
+                |   boolfactor
                 ;
 
 boolfactor      :   NOT '(' boolexpr ')'
@@ -235,8 +243,9 @@ boolfactor      :   NOT '(' boolexpr ')'
                             // Using (1.0 - var->val) to invert the boolean value of var
                             float res = var->is_const ? 1.0 - var->val : NO_VAL;
 
-                            install(symbols_table, $$, BOOL_CODE, res, var->is_const);
+                            install(symbols_table, $$, INT_CODE, res, var->is_const);
                             // TODO: This is not a valid command in the assignment - need to fix - maybe ask about it
+                            // TODO: Load the int 1, and then subtract the var->val as I did for res
                             sprintf(command, "NOT %s %s", $$, $3);
                             append_value(generated_commands, command);
                         } else {
@@ -297,10 +306,10 @@ boolfactor      :   NOT '(' boolexpr ')'
                                     b = install(symbols_table, $$, FLOAT_CODE, b->val, is_const);
                                     sprintf($$, "T%d", temp_count++);
                                 }
-                                install(symbols_table, $$, BOOL_CODE, res, is_const);
+                                install(symbols_table, $$, INT_CODE, res, is_const);
                             } else {
                                 command[0] = 'I';
-                                install(symbols_table, $$, BOOL_CODE, (int)res, is_const);
+                                install(symbols_table, $$, INT_CODE, (int)res, is_const);
                             }
 
                             sprintf(command + strlen(command), " %s %s %s", $$, a->name, b->name);

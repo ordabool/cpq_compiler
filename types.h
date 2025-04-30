@@ -15,6 +15,5 @@
 #define CASTF                   21
 #define INT_CODE                22
 #define FLOAT_CODE              23
-#define BOOL_CODE               24
 
 #endif // TYPES_H

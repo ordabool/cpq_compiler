@@ -11,7 +11,7 @@ c, d: int;
 
     d = cast<int>(b);
 
-    if (!(a < b))
+    if (!(a < b) && a < b)
         output(a);
     else
         output(b);
