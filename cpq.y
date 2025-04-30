@@ -227,6 +227,7 @@ boolfactor      :   NOT '(' boolexpr ')' { }
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
+                            char command[100];
                             // printf("a=%p, b=%p\n", (void*)a, (void*)b);
                             // Always install boolean results as INT_CODE
                             install(symbols_table, $$, INT_CODE, 0);
@@ -234,52 +235,53 @@ boolfactor      :   NOT '(' boolexpr ')' { }
                             if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
                                 switch ($2) {
                                     case EQ:
-                                        fprintf (stdout, "REQL %s %s %s\n", $$, a->name, b->name);
+                                        sprintf(command, "REQL %s %s %s", $$, a->name, b->name);
                                         break;
                                     case NEQ:
-                                        fprintf (stdout, "RNQL %s %s %s\n", $$, a->name, b->name);
+                                        sprintf(command, "RNQL %s %s %s", $$, a->name, b->name);
                                         break;
                                     case LT:
-                                        fprintf (stdout, "RLSS %s %s %s\n", $$, a->name, b->name);
+                                        sprintf(command, "RLSS %s %s %s", $$, a->name, b->name);
                                         break;
                                     case GT:
-                                        fprintf (stdout, "RGRT %s %s %s\n", $$, a->name, b->name);
+                                        sprintf(command, "RGRT %s %s %s", $$, a->name, b->name);
                                         break;
                                     case GTE:
-                                        fprintf (stdout, "RGEQ %s %s %s\n", $$, a->name, b->name);
+                                        sprintf(command, "RGEQ %s %s %s", $$, a->name, b->name);
                                         break;
                                     case LTE:
-                                        fprintf (stdout, "RLEQ %s %s %s\n", $$, a->name, b->name);
+                                        sprintf(command, "RLEQ %s %s %s", $$, a->name, b->name);
                                         break;
                                 }
                             } else {
                                 switch ($2) {
                                     case EQ:
-                                        fprintf (stdout, "IEQL %s %s %s\n", $$, a->name, b->name);
+                                        sprintf(command, "IEQL %s %s %s", $$, a->name, b->name);
                                         break;
                                     case NEQ:
-                                        fprintf (stdout, "INQL %s %s %s\n", $$, a->name, b->name);
+                                        sprintf(command, "INQL %s %s %s", $$, a->name, b->name);
                                         break;
                                     case LT:
-                                        fprintf (stdout, "ILSS %s %s %s\n", $$, a->name, b->name);
+                                        sprintf(command, "ILSS %s %s %s", $$, a->name, b->name);
                                         break;
                                     case GT:
-                                        fprintf (stdout, "IGRT %s %s %s\n", $$, a->name, b->name);
+                                        sprintf(command, "IGRT %s %s %s", $$, a->name, b->name);
                                         break;
                                     case GTE:
-                                        fprintf (stdout, "IGEQ %s %s %s\n", $$, a->name, b->name);
+                                        sprintf(command, "IGEQ %s %s %s", $$, a->name, b->name);
                                         break;
                                     case LTE:
-                                        fprintf (stdout, "ILEQ %s %s %s\n", $$, a->name, b->name);
+                                        sprintf(command, "ILEQ %s %s %s", $$, a->name, b->name);
                                         break;
                                 }
                             }
+                            generated_commands = append_value(generated_commands, command);
                         } else {
                             if (a == NULL) {
-                                fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
                             }
                             if (b == NULL) {
-                                fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
                             }
                         }
                     }
