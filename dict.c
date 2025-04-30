@@ -2,9 +2,6 @@
 // Implementation taken from:
 // https://stackoverflow.com/questions/4384359/quick-way-to-implement-dictionary-in-c - Credit
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
 #include "dict.h"
 
 unsigned hash(char* s) {
@@ -22,7 +19,7 @@ struct dict_item* lookup(dict d, char *s) {
     return NULL;
 }
 
-struct dict_item* install(dict d, char* name, int type, float val) {
+struct dict_item* install(dict d, char* name, int type, float val, bool is_const) {
     struct dict_item *np;
     unsigned hashval;
     if ((np = lookup(d, name)) == NULL) {

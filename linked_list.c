@@ -1,6 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include "linked_list.h"
 
 struct linked_list* new_linked_list(const char* value) {

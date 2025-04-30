@@ -86,7 +86,7 @@ declaration     :   idlist ':' type ';'
                         // Install all IDs with the type
                         struct list_node* current = $1->head;
                         while (current != NULL) {
-                            install(symbols_table, current->value, $3, 1.0);
+                            install(symbols_table, current->value, $3, 1.0, false);
                             current = current->next;
                         }
                         free_linked_list($1);
@@ -123,7 +123,7 @@ assignment_stmt :   ID '=' expression ';'
                         if (var == NULL) {
                             fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
                         } else {
-                            install(symbols_table, $1, var->type, var->val);
+                            install(symbols_table, $1, var->type, var->val, false);
                         }
                     }
                 ;
@@ -185,7 +185,7 @@ boolexpr        :   boolexpr OR boolterm
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
-                            install(symbols_table, $$, INT_CODE, 0);
+                            install(symbols_table, $$, INT_CODE, 0, false);
                             fprintf(stdout, "OR %s %s %s\n", $$, $1, $3);
                         } else {
                             if (a == NULL) {
@@ -206,7 +206,7 @@ boolterm        :   boolterm AND boolfactor
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
-                            install(symbols_table, $$, INT_CODE, 0);
+                            install(symbols_table, $$, INT_CODE, 0, false);
                             fprintf(stdout, "AND %s %s %s\n", $$, $1, $3);
                         } else {
                             if (a == NULL) {
@@ -230,7 +230,7 @@ boolfactor      :   NOT '(' boolexpr ')' { }
                             char command[100];
                             // printf("a=%p, b=%p\n", (void*)a, (void*)b);
                             // Always install boolean results as INT_CODE
-                            install(symbols_table, $$, INT_CODE, 0);
+                            install(symbols_table, $$, INT_CODE, 0, false);
                             // But use float comparison if either operand is float
                             if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
                                 switch ($2) {
@@ -301,9 +301,9 @@ expression      :   expression ADDOP term
                             }
 
                             if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
-                                install(symbols_table, $$, FLOAT_CODE, res);
+                                install(symbols_table, $$, FLOAT_CODE, res, false);
                             } else {
-                                install(symbols_table, $$, INT_CODE, (int)res);
+                                install(symbols_table, $$, INT_CODE, (int)res, false);
                             }
                         } else {
                             if (a == NULL) {
@@ -332,9 +332,9 @@ term            :   term MULOP factor
                             }
 
                             if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
-                                install(symbols_table, $$, FLOAT_CODE, res);
+                                install(symbols_table, $$, FLOAT_CODE, res, false);
                             } else {
-                                install(symbols_table, $$, INT_CODE, (int)res);
+                                install(symbols_table, $$, INT_CODE, (int)res, false);
                             }
                         } else {
                             if (a == NULL) {
@@ -357,9 +357,9 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                         } else {
                             sprintf($$, "T%d", temp_count++);
                             if ($1 == CASTI) {
-                                install(symbols_table, $$, INT_CODE, (int)var->val);
+                                install(symbols_table, $$, INT_CODE, (int)var->val, false);
                             } else {
-                                install(symbols_table, $$, FLOAT_CODE, var->val);
+                                install(symbols_table, $$, FLOAT_CODE, var->val, false);
                             }
                         }
                     }
@@ -372,7 +372,7 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                         } else {
                             fprintf (stdout, "RASN %s %f\n", $$, $1.val);
                         }
-                        install(symbols_table, $$, $1.attr, $1.val);
+                        install(symbols_table, $$, $1.attr, $1.val, true);
                     }
                 ;
 
