@@ -62,6 +62,7 @@
 program         :   declarations stmt_block
                     {
                         append_value(generated_commands, "HALT");
+                        append_value(generated_commands, "Created by Or Dabool");
 
                         printf("\n---------------------------------------------\n");
                         printf("Program complete, cleaning up..\n");
@@ -293,36 +294,6 @@ boolfactor      :   NOT '(' boolexpr ')' { }
 
 expression      :   expression ADDOP term
                     {
-                        sprintf($$, "T%d", temp_count++);
-                        struct dict_item* a = lookup(symbols_table, $1);
-                        struct dict_item* b = lookup(symbols_table, $3);
-                        if (a != NULL && b != NULL) {
-                            float res;
-                            if ($2 == ADD) {
-                                res = a->val + b->val;
-                            } else {
-                                res = a->val - b->val;
-                            }
-
-                            if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
-                                install(symbols_table, $$, FLOAT_CODE, res, false);
-                            } else {
-                                install(symbols_table, $$, INT_CODE, (int)res, false);
-                            }
-                        } else {
-                            if (a == NULL) {
-                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
-                            }
-                            if (b == NULL) {
-                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
-                            }
-                        }
-                    }
-                |   term
-                ;
-
-term            :   term MULOP factor
-                    {
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
@@ -332,19 +303,31 @@ term            :   term MULOP factor
 
                             float res = NO_VAL;
                             if (is_const) {
-                                if ($2 == MUL) {
-                                    res = a->val * b->val;
-                                    sprintf(command, "XMLT");
+                                if ($2 == ADD) {
+                                    res = a->val + b->val;
+                                    sprintf(command, "XADD");
                                 } else {
-                                    // TODO: Check for division by zero
-                                    res = a->val / b->val;
-                                    sprintf(command, "XDIV");
+                                    res = a->val - b->val;
+                                    sprintf(command, "XSUB");
                                 }
                             }
 
                             if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
                                 command[0] = 'F';
-                                // TODO: Add casts if needed
+                                if (a->type == INT_CODE) {
+                                    char cast_command[COMMAND_LENGTH];
+                                    sprintf(cast_command, "ITOR %s %s", $$, a->name);
+                                    append_value(generated_commands, cast_command);
+                                    a = install(symbols_table, $$, FLOAT_CODE, a->val, is_const);
+                                    sprintf($$, "T%d", temp_count++);
+                                }
+                                if (b->type == INT_CODE) {
+                                    char cast_command[COMMAND_LENGTH];
+                                    sprintf(cast_command, "ITOR %s %s", $$, a->name);
+                                    append_value(generated_commands, cast_command);
+                                    b = install(symbols_table, $$, FLOAT_CODE, b->val, is_const);
+                                    sprintf($$, "T%d", temp_count++);
+                                }
                                 install(symbols_table, $$, FLOAT_CODE, res, is_const);
                             } else {
                                 command[0] = 'I';
@@ -356,9 +339,74 @@ term            :   term MULOP factor
                         } else {
                             if (a == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                strcpy($$, $3);
                             }
                             if (b == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                strcpy($$, $1);
+                            }
+                        }
+                    }
+                |   term
+                ;
+
+term            :   term MULOP factor
+                    {
+                        struct dict_item* a = lookup(symbols_table, $1);
+                        struct dict_item* b = lookup(symbols_table, $3);
+                        if (a != NULL && b != NULL) {
+                            if ($2 == DIV && b->is_const && b->val == 0) {
+                                fprintf(stderr, "line %d: Division by zero\n", yylineno);
+                                strcpy($$, $1);
+                            } else {
+                                sprintf($$, "T%d", temp_count++);
+                                char command[COMMAND_LENGTH];
+                                bool is_const = a->is_const && b->is_const;
+
+                                float res = NO_VAL;
+                                if (is_const) {
+                                    if ($2 == MUL) {
+                                        res = a->val * b->val;
+                                        sprintf(command, "XMLT");
+                                    } else {
+                                        res = a->val / b->val;
+                                        sprintf(command, "XDIV");
+                                    }
+                                }
+
+                                if (a->type == FLOAT_CODE || b->type == FLOAT_CODE) {
+                                    command[0] = 'F';
+                                    if (a->type == INT_CODE) {
+                                        char cast_command[COMMAND_LENGTH];
+                                        sprintf(cast_command, "ITOR %s %s", $$, a->name);
+                                        append_value(generated_commands, cast_command);
+                                        a = install(symbols_table, $$, FLOAT_CODE, a->val, is_const);
+                                        sprintf($$, "T%d", temp_count++);
+                                    }
+                                    if (b->type == INT_CODE) {
+                                        char cast_command[COMMAND_LENGTH];
+                                        sprintf(cast_command, "ITOR %s %s", $$, a->name);
+                                        append_value(generated_commands, cast_command);
+                                        b = install(symbols_table, $$, FLOAT_CODE, b->val, is_const);
+                                        sprintf($$, "T%d", temp_count++);
+                                    }
+                                    install(symbols_table, $$, FLOAT_CODE, res, is_const);
+                                } else {
+                                    command[0] = 'I';
+                                    install(symbols_table, $$, INT_CODE, (int)res, is_const);
+                                }
+
+                                sprintf(command + strlen(command), " %s %s %s", $$, a->name, b->name);
+                                append_value(generated_commands, command);
+                            }
+                        } else {
+                            if (a == NULL) {
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                strcpy($$, $3);
+                            }
+                            if (b == NULL) {
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                strcpy($$, $1);
                             }
                         }
                     }
@@ -371,6 +419,7 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                         struct dict_item* var = lookup(symbols_table, $3);
                         if (var == NULL) {
                             fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            strcpy($$, $3);
                         } else {
                             char command[COMMAND_LENGTH];
                             if (var->type == INT_CODE && $1 == CASTF) {

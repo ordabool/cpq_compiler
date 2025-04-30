@@ -7,6 +7,7 @@ c, d: int;
     input(b);
 
     c = 3 * 2.0;
+    c = 6 - 1;
 
     d = cast<int>(b);
 
