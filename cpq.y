@@ -156,7 +156,34 @@ input_stmt      :   INPUT '(' ID ')' ';'
 output_stmt     :   OUTPUT '(' expression ')' ';'
                 ;
 
-if_stmt         :   IF '(' boolexpr ')' stmt ELSE stmt
+if_stmt         :   IF '(' boolexpr ')'
+                    {
+                        struct dict_item* cond = lookup(symbols_table, $3);
+                        if (cond == NULL) {
+                            fprintf(stderr, "line %d: Internal error: boolean result not found\n", yylineno);
+                        }
+
+                        char jump_command[COMMAND_LENGTH];
+                        // TODO: calculate the jump address
+                        int else_address = 2;
+                        sprintf(jump_command, "JMPZ %d %s", else_address, $3);
+                        append_value(generated_commands, jump_command);
+                        // zero = install(symbols_table, $$, INT_CODE, 0, true);
+                        // sprintf($$, "T%d", temp_count++);
+                    }
+                    stmt
+                    {
+                        char jump_command[COMMAND_LENGTH];
+                        // TODO: calculate the jump address
+                        int next_address = 3;
+                        sprintf(jump_command, "JMP %d", next_address);
+                        append_value(generated_commands, jump_command);
+                    }
+                    ELSE 
+                    {
+                        // TODO: now will be the else address
+                    }
+                    stmt
                     {
                         struct dict_item* cond = lookup(symbols_table, $3);
                         if (cond == NULL) {
