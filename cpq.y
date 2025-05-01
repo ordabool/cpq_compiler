@@ -14,6 +14,8 @@
     struct linked_list* generated_commands = NULL;
     #define NO_VAL -1
     #define COMMAND_LENGTH 200
+    struct dict_item* one = NULL;
+    struct dict_item* zero = NULL;
 }
 
 %code requires {
@@ -185,20 +187,44 @@ stmtlist        :   stmtlist stmt
 
 boolexpr        :   boolexpr OR boolterm
                     {
-                        // TODO: use this logic for OR:
-                        // (a + b) > 0 ? 1 : 0;
-                        sprintf($$, "T%d", temp_count++);
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
-                            install(symbols_table, $$, INT_CODE, 0, false);
-                            fprintf(stdout, "OR %s %s %s\n", $$, $1, $3);
+                            sprintf($$, "T%d", temp_count++);
+
+                            // We need a temporary variable to store the value of 0 - define if not already set
+                            if (zero == NULL) {
+                                char assign_zero_command[COMMAND_LENGTH];
+                                sprintf(assign_zero_command, "IASN %s %d", $$, 0);
+                                append_value(generated_commands, assign_zero_command);
+                                zero = install(symbols_table, $$, INT_CODE, 0, true);
+                                sprintf($$, "T%d", temp_count++);
+                            }
+
+                            char add_command[COMMAND_LENGTH];
+                            bool is_const = a->is_const && b->is_const;
+
+                            // add the boolean values, if the addition result > 0 then the result is true
+                            float res = is_const ? a->val + b->val : NO_VAL;
+                            sprintf(add_command, "IADD %s %s %s", $$, $1, $3);
+                            struct dict_item* add_result = install(symbols_table, $$, INT_CODE, (int)res, is_const);
+                            append_value(generated_commands, add_command);
+                            sprintf($$, "T%d", temp_count++);
+
+                            char command[COMMAND_LENGTH];
+
+                            res = is_const ? add_result->val > 0 : NO_VAL;
+                            sprintf(command, "IGRT %s %s %s", $$, add_result->name, zero->name);
+                            install(symbols_table, $$, INT_CODE, (int)res, is_const);
+                            append_value(generated_commands, command);
                         } else {
                             if (a == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                strcpy($$, $3);
                             }
                             if (b == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                strcpy($$, $1);
                             }
                         }
                     }
@@ -216,7 +242,7 @@ boolterm        :   boolterm AND boolfactor
 
                             // multiply the boolean values to get the && result
                             float res = is_const ? a->val * b->val : NO_VAL;
-                            sprintf(command, "IADD %s %s %s", $$, $1, $3);
+                            sprintf(command, "IMLT %s %s %s", $$, $1, $3);
                             install(symbols_table, $$, INT_CODE, (int)res, is_const);
                             append_value(generated_commands, command);
                         } else {
@@ -238,15 +264,23 @@ boolfactor      :   NOT '(' boolexpr ')'
                         struct dict_item* var = lookup(symbols_table, $3);
                         if (var != NULL) {
                             sprintf($$, "T%d", temp_count++);
+
+                            // We need a temporary variable to store the value of 1 - define if not already set
+                            if (one == NULL) {
+                                char assign_one_command[COMMAND_LENGTH];
+                                sprintf(assign_one_command, "IASN %s %d", $$, 1);
+                                append_value(generated_commands, assign_one_command);
+                                one = install(symbols_table, $$, INT_CODE, 1, true);
+                                sprintf($$, "T%d", temp_count++);
+                            }
+
                             char command[COMMAND_LENGTH];
 
                             // Using (1.0 - var->val) to invert the boolean value of var
-                            float res = var->is_const ? 1.0 - var->val : NO_VAL;
+                            float res = var->is_const ? one->val - var->val : NO_VAL;
 
                             install(symbols_table, $$, INT_CODE, res, var->is_const);
-                            // TODO: This is not a valid command in the assignment - need to fix - maybe ask about it
-                            // TODO: Load the int 1, and then subtract the var->val as I did for res
-                            sprintf(command, "NOT %s %s", $$, $3);
+                            sprintf(command, "ISUB %s %s %s", $$, one->name, $3);
                             append_value(generated_commands, command);
                         } else {
                             fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
