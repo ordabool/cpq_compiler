@@ -157,12 +157,37 @@ stmt            :   assignment_stmt
 
 assignment_stmt :   ID '=' expression ';'
                     {
-                        // TODO: check assignment compatibility as declared in the doc
-                        struct dict_item* var = lookup(symbols_table, $1);
-                        if (var == NULL) {
-                            fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                        struct dict_item* a = lookup(symbols_table, $1);
+                        struct dict_item* b = lookup(symbols_table, $3);
+                        if (a != NULL && b != NULL) {
+                            if (a->type == INT_CODE && b->type == FLOAT_CODE) {
+                                fprintf(stderr, "line %d: Invalid assignment of float to int variable %s\n", yylineno, $1);
+                            } else {
+                                char command[COMMAND_LENGTH];
+                                if (a->type == FLOAT_CODE) {
+                                    if (b->type == INT_CODE) {
+                                        // char temp_name[50];
+                                        sprintf($3, "T%d", temp_count++);
+
+                                        char cast_command[COMMAND_LENGTH];
+                                        sprintf(cast_command, "ITOR %s %s", $3, b->name);
+                                        append_value(generated_commands, cast_command);
+                                        b = install(symbols_table, $3, FLOAT_CODE, b->val, b->is_const);
+                                    }
+                                    sprintf(command, "RASN %s %s", $1, $3);
+                                } else {
+                                    sprintf(command, "IASN %s %s", $1, $3);
+                                }
+                                install(symbols_table, $1, a->type, b->val, b->is_const);
+                                append_value(generated_commands, command);
+                            }
                         } else {
-                            install(symbols_table, $1, var->type, var->val, false);
+                            if (a == NULL) {
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                            }
+                            if (b == NULL) {
+                                fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            }
                         }
                     }
                 ;
@@ -249,6 +274,7 @@ while_stmt      :   WHILE '('
                         sprintf(while_restart_command, "JMP %d", generated_commands->size + 1);
                         struct list_node* while_restart = new_list_node(while_restart_command);
                         backpatch_stack = push_stack(backpatch_stack, while_restart);
+                        // TODO: Add a flag to mark the start of the while statement, and backpatch all jumps for breaks at the end, like in switch
                     }
                     boolexpr
                     {
@@ -300,67 +326,133 @@ switch_stmt     :   SWITCH '(' expression ')'
                         struct list_node* switch_condition = new_list_node(switch_condition_command);
                         backpatch_stack = push_stack(backpatch_stack, switch_condition);
                     }
-                    '{' caselist DEFAULT ':' stmtlist '}' 
+                    '{' caselist DEFAULT ':'
                     {
-                        // pop switch_condition and free it as it was allocated manually
-                        struct list_node* switch_condition = pop_stack(backpatch_stack);
-                        free(switch_condition);
+                        // Backpatch previous case if needed
+                        struct stack* popped;
+                        while (backpatch_stack->top > -1 && strcmp(backpatch_stack->stack_arr[backpatch_stack->top]->value, "CASE_START") != 0) {
+                            struct list_node* popped_node = pop_stack(backpatch_stack);
+                            popped = push_stack(popped, popped_node);
+                        }
 
-                        // pop switch_flag and free it as it was allocated manually
-                        struct list_node* switch_flag = pop_stack(backpatch_stack);
-                        free(switch_flag);
+                        // If found a CASE_START flag, backpatch the previous case
+                        if (backpatch_stack->top > -1) {
+                            struct list_node* case_flag = pop_stack(backpatch_stack);
+                            struct list_node* jump_to_backpatch = pop_stack(popped);
+                            backpatch(jump_to_backpatch, generated_commands->size+1);
+                        }
+
+                        // Push all the popped elements back to the stack
+                        while (popped != NULL && popped->top > -1) {
+                            struct list_node* popped_node = pop_stack(popped);
+                            backpatch_stack = push_stack(backpatch_stack, popped_node);
+                        }
                     }
+                    stmtlist 
+                    {
+                        // Pop all the elements until we reach the SWITCH_START flag
+                        struct stack* popped;
+                        while (backpatch_stack->top > -1 && strcmp(backpatch_stack->stack_arr[backpatch_stack->top]->value, "SWITCH_START") != 0) {
+                            struct list_node* popped_node = pop_stack(backpatch_stack);
+                            popped = push_stack(popped, popped_node);
+                        }
+
+                        // Pop switch_condition and switch_flag now that the switch is done
+                        struct list_node* switch_condition = pop_stack(popped);
+                        struct list_node* switch_flag = pop_stack(backpatch_stack);
+
+                        // Backpatch all jumps in popped
+                        while (popped->top > -1) {
+                            struct list_node* popped_node = pop_stack(popped);
+                            backpatch(popped_node, generated_commands->size + 1);
+                        }
+                    }
+                    '}'
                 ;
 
-caselist        :   caselist CASE NUM ':' stmtlist
+caselist        :   caselist CASE NUM ':'
                     {
-                        /*
-                        Basic structure should be:
-                        For Each case:
-                        0 - Backpatch the previous case if needed - how to know if needed?
-                        1 - Examine the condition of the switch statement, with current case
-                        2 - If false, jump - next case - will be backpatched in next case
-                        3 - If true, perform the case statement
-                        4 - Add JMP command to after the switch - will be backpatched after the switch
-                        */
-                        // sprintf($$, "IEQL %%s %%s %d", $3);
-                        if ($3.attr == INT_CODE) {
-                            struct stack* popped;;
+                        // If the number is not an integer, or backpatch_stack is empty, do nothing
+                        if ($3.attr == INT_CODE && backpatch_stack != NULL && backpatch_stack->top > -1) {
 
-                            // Pop the elements until we reach the SWITCH_START, meaning we found the switch condition
-                            while (backpatch_stack->top > -1 && strcmp(backpatch_stack->stack_arr[backpatch_stack->top]->value, "SWITCH_START") != 0) {
-                                struct list_node* popped_node = pop_stack(backpatch_stack);
-                                popped = push_stack(popped, popped_node);
+                            // Look for a SWITCH_START flag in the stack, to know that this is a valid case
+                            for (int i = backpatch_stack->top; i > -1; i--) {
+                                if (strcmp(backpatch_stack->stack_arr[i]->value, "SWITCH_START") == 0) {
+                                    char temp_name[50];
+                                    sprintf(temp_name, "T%d", temp_count++);
+
+                                    // Add the switch comaprison command - IEQL
+                                    char switch_condition_command[COMMAND_LENGTH];
+                                    strcpy(switch_condition_command, backpatch_stack->stack_arr[i+1]->value);
+                                    sprintf(switch_condition_command, switch_condition_command, temp_name, (int)$3.val);
+                                    append_value(generated_commands, switch_condition_command);
+                                    install(symbols_table, temp_name, INT_CODE, NO_VAL, false);
+
+                                    // Backpatch previous case if needed
+                                    struct stack* popped;
+                                    while (backpatch_stack->top > -1 && strcmp(backpatch_stack->stack_arr[backpatch_stack->top]->value, "CASE_START") != 0) {
+                                        struct list_node* popped_node = pop_stack(backpatch_stack);
+                                        popped = push_stack(popped, popped_node);
+                                    }
+
+                                    // If found a CASE_START flag, backpatch the previous case
+                                    if (backpatch_stack->top > -1) {
+                                        struct list_node* case_flag = pop_stack(backpatch_stack);
+                                        struct list_node* jump_to_backpatch = pop_stack(popped);
+                                        backpatch(jump_to_backpatch, generated_commands->size);
+                                    }
+
+                                    // Push all the popped elements back to the stack
+                                    while (popped != NULL && popped->top > -1) {
+                                        struct list_node* popped_node = pop_stack(popped);
+                                        backpatch_stack = push_stack(backpatch_stack, popped_node);
+                                    }
+
+                                    // Place a flag to mark the start of the case, for backpatching
+                                    char case_start_flag[COMMAND_LENGTH];
+                                    sprintf(case_start_flag, "CASE_START");
+                                    struct list_node* case_flag = new_list_node(case_start_flag);
+                                    backpatch_stack = push_stack(backpatch_stack, case_flag);
+
+                                    // Add the jump command to next case
+                                    char jump_command[COMMAND_LENGTH];
+                                    sprintf(jump_command, "JMPZ %%d %s", temp_name);
+                                    append_value(generated_commands, jump_command);
+                                    backpatch_stack = push_stack(backpatch_stack, generated_commands->tail);
+                                    break;
+                                }
                             }
-
-                            // Generate the condition command
-                            if (backpatch_stack->top > -1 && backpatch_stack->stack_arr[backpatch_stack->top]->value, "SWITCH_START") {
-                                char temp_name[50];
-                                sprintf(temp_name, "T%d", temp_count++);
-
-                                char switch_condition_command[COMMAND_LENGTH];
-                                strcpy(switch_condition_command, popped->stack_arr[popped->top]->value);
-                                sprintf(switch_condition_command, switch_condition_command, temp_name, (int)$3.val);
-                                append_value(generated_commands, switch_condition_command);
-                                install(symbols_table, temp_name, INT_CODE, NO_VAL, false);
-                            }
-
-                            // Push all the popped elements back to the stack
-                            while (popped->top > -1) {
-                                struct list_node* popped_node = pop_stack(popped);
-                                backpatch_stack = push_stack(backpatch_stack, popped_node);
-                            }
-
-
-                            // TODO: add JMPZ to following command - will need to backpatch it
                         } else {
                             fprintf(stderr, "line %d: Case value is not an integer!\n", yylineno);
                         }
                     }
+                    stmtlist
                 |   /* empty */
                 ;
 
 break_stmt      :   BREAK ';'
+                    {
+                        // TODO: allow break statement in while context
+                        bool case_context = false;
+                        for (int i = backpatch_stack->top; i > -1; i--) {
+                            if (strcmp(backpatch_stack->stack_arr[i]->value, "SWITCH_START") == 0) {
+                                case_context = false;
+                                break;
+                            }
+                            if (strcmp(backpatch_stack->stack_arr[i]->value, "CASE_START") == 0) {
+                                case_context = true;
+                                break;
+                            }
+                        }
+
+                        if (case_context) {
+                            struct list_node* break_command = new_list_node("JMP %d");
+                            append_value(generated_commands, break_command->value);
+                            backpatch_stack = push_stack(backpatch_stack, generated_commands->tail);
+                        } else {
+                            fprintf(stderr, "line %d: Break statement not in case context!\n", yylineno);
+                        }
+                    }
                 ;
 
 stmt_block      :   '{' stmtlist '}'
@@ -663,12 +755,12 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                                 sprintf($$, "T%d", temp_count++);
                                 sprintf(command, "ITOR %s %s", $$, $3);
                                 append_value(generated_commands, command);
-                                install(symbols_table, $$, INT_CODE, (int)var->val, false);
+                                install(symbols_table, $$, FLOAT_CODE, var->val, false);
                             } else if (var->type == FLOAT_CODE && $1 == CASTI) {
                                 sprintf($$, "T%d", temp_count++);
                                 sprintf(command, "RTOI %s %s", $$, $3);
                                 append_value(generated_commands, command);
-                                install(symbols_table, $$, FLOAT_CODE, var->val, false);
+                                install(symbols_table, $$, INT_CODE, (int)var->val, false);
                             } else {
                                 strcpy($$, $3);
                             }

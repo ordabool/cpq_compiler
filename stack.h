@@ -15,5 +15,6 @@ typedef struct stack {
 struct stack* push_stack(stack* s, list_node* n);
 struct list_node* pop_stack(stack* s);
 void free_stack(stack* s);
+void print_stack(stack* s);
 
 #endif // STACK_H

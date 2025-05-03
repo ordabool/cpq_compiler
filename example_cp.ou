@@ -12,23 +12,13 @@ c, d: int;
         else
            output(b);
 
-    switch(c) {
-        case 4:
-            output(4);
-            break;
-        case 5:
-            output(5);
-        default:
-            output(1);
-    }
-
     c = 3 * 2.0;
     c = 6 - 1;
 
     d = cast<int>(b);
 
     if (!(a < b) || a < b)
-        output(c);
+        output(a);
     else
-        output(d);
+        output(b);
 }

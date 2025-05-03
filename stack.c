@@ -34,3 +34,15 @@ void free_stack(stack* s) {
     free(s);
 }
 
+void print_stack(stack* s) {
+    if (s == NULL || s->top == -1) {
+        printf("Stack is empty.\n");
+        return;
+    }
+
+    for (int i = s->top; i > -1; i--) {
+        printf("%s\n", s->stack_arr[i]->value);
+    }
+    printf("\n");
+}
+
