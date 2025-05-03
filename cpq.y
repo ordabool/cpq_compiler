@@ -22,6 +22,30 @@
     void backpatch(struct list_node* command_node, int address) {
         sprintf(command_node->value, command_node->value, address);
     }
+
+    struct dict_item* get_one() {
+        if (one == NULL) {
+            char temp_name[50];
+            sprintf(temp_name, "T%d", temp_count++);
+            char assign_one_command[COMMAND_LENGTH];
+            sprintf(assign_one_command, "IASN %s %d", temp_name, 1);
+            append_value(generated_commands, assign_one_command);
+            one = install(symbols_table, temp_name, INT_CODE, 1, true);
+        }
+        return one;
+    }
+
+    struct dict_item* get_zero() {
+        if (zero == NULL) {
+            char temp_name[50];
+            sprintf(temp_name, "T%d", temp_count++);
+            char assign_zero_command[COMMAND_LENGTH];
+            sprintf(assign_zero_command, "IASN %s %d", temp_name, 0);
+            append_value(generated_commands, assign_zero_command);
+            zero = install(symbols_table, temp_name, INT_CODE, 0, true);
+        }
+        return zero;
+    }
 }
 
 %code requires {
@@ -133,6 +157,7 @@ stmt            :   assignment_stmt
 
 assignment_stmt :   ID '=' expression ';'
                     {
+                        // TODO: check assignment compatibility as declared in the doc
                         struct dict_item* var = lookup(symbols_table, $1);
                         if (var == NULL) {
                             fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
@@ -182,15 +207,8 @@ if_stmt         :   IF '(' boolexpr ')'
                         struct dict_item* cond = lookup(symbols_table, $3);
                         if (cond == NULL) {
                             fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
-                        } else {
                             // In this case, to continue the parsing, set $3 as zero
-                            if (zero == NULL) {
-                                char assign_zero_command[COMMAND_LENGTH];
-                                sprintf($3, "T%d", temp_count++);
-                                sprintf(assign_zero_command, "IASN %s %d", $3, 0);
-                                append_value(generated_commands, assign_zero_command);
-                                zero = install(symbols_table, $3, INT_CODE, 0, true);
-                            }
+                            zero = get_zero();
                             strcpy($3, zero->name);
                         }
 
@@ -237,13 +255,8 @@ while_stmt      :   WHILE '('
                         struct dict_item* cond = lookup(symbols_table, $4);
                         if (cond == NULL) {
                             fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $4);
-                            if (zero == NULL) {
-                                char assign_zero_command[COMMAND_LENGTH];
-                                sprintf($4, "T%d", temp_count++);
-                                sprintf(assign_zero_command, "IASN %s %d", $4, 0);
-                                append_value(generated_commands, assign_zero_command);
-                                zero = install(symbols_table, $4, INT_CODE, 0, true);
-                            }
+                            // In this case, to continue the parsing, set $4 as zero
+                            zero = get_zero();
                             strcpy($4, zero->name);
                         }
 
@@ -265,10 +278,85 @@ while_stmt      :   WHILE '('
                     }
                 ;
 
-switch_stmt     :   SWITCH '(' expression ')' '{' caselist DEFAULT ':' stmtlist '}'
+switch_stmt     :   SWITCH '(' expression ')'
+                    {
+                        struct dict_item* cond = lookup(symbols_table, $3);
+                        if (cond == NULL) {
+                            fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            zero = get_zero();
+                            strcpy($3, zero->name);
+                        } else if (cond->type != INT_CODE) {
+                            fprintf(stderr, "line %d: The variable %s is not an integer!\n", yylineno, $3);
+                            zero = get_zero();
+                            strcpy($3, zero->name);
+                        }
+
+                        char* switch_start_flag = "SWITCH_START";
+                        struct list_node* switch_flag = new_list_node(switch_start_flag);
+                        backpatch_stack = push_stack(backpatch_stack, switch_flag);
+
+                        char switch_condition_command[COMMAND_LENGTH];
+                        sprintf(switch_condition_command, "IEQL %%s %s %%d", $3);
+                        struct list_node* switch_condition = new_list_node(switch_condition_command);
+                        backpatch_stack = push_stack(backpatch_stack, switch_condition);
+                    }
+                    '{' caselist DEFAULT ':' stmtlist '}' 
+                    {
+                        // pop switch_condition and free it as it was allocated manually
+                        struct list_node* switch_condition = pop_stack(backpatch_stack);
+                        free(switch_condition);
+
+                        // pop switch_flag and free it as it was allocated manually
+                        struct list_node* switch_flag = pop_stack(backpatch_stack);
+                        free(switch_flag);
+                    }
                 ;
 
 caselist        :   caselist CASE NUM ':' stmtlist
+                    {
+                        /*
+                        Basic structure should be:
+                        For Each case:
+                        0 - Backpatch the previous case if needed - how to know if needed?
+                        1 - Examine the condition of the switch statement, with current case
+                        2 - If false, jump - next case - will be backpatched in next case
+                        3 - If true, perform the case statement
+                        4 - Add JMP command to after the switch - will be backpatched after the switch
+                        */
+                        // sprintf($$, "IEQL %%s %%s %d", $3);
+                        if ($3.attr == INT_CODE) {
+                            struct stack* popped;;
+
+                            // Pop the elements until we reach the SWITCH_START, meaning we found the switch condition
+                            while (backpatch_stack->top > -1 && strcmp(backpatch_stack->stack_arr[backpatch_stack->top]->value, "SWITCH_START") != 0) {
+                                struct list_node* popped_node = pop_stack(backpatch_stack);
+                                popped = push_stack(popped, popped_node);
+                            }
+
+                            // Generate the condition command
+                            if (backpatch_stack->top > -1 && backpatch_stack->stack_arr[backpatch_stack->top]->value, "SWITCH_START") {
+                                char temp_name[50];
+                                sprintf(temp_name, "T%d", temp_count++);
+
+                                char switch_condition_command[COMMAND_LENGTH];
+                                strcpy(switch_condition_command, popped->stack_arr[popped->top]->value);
+                                sprintf(switch_condition_command, switch_condition_command, temp_name, (int)$3.val);
+                                append_value(generated_commands, switch_condition_command);
+                                install(symbols_table, temp_name, INT_CODE, NO_VAL, false);
+                            }
+
+                            // Push all the popped elements back to the stack
+                            while (popped->top > -1) {
+                                struct list_node* popped_node = pop_stack(popped);
+                                backpatch_stack = push_stack(backpatch_stack, popped_node);
+                            }
+
+
+                            // TODO: add JMPZ to following command - will need to backpatch it
+                        } else {
+                            fprintf(stderr, "line %d: Case value is not an integer!\n", yylineno);
+                        }
+                    }
                 |   /* empty */
                 ;
 
@@ -287,16 +375,10 @@ boolexpr        :   boolexpr OR boolterm
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
-                            sprintf($$, "T%d", temp_count++);
-
                             // We need a temporary variable to store the value of 0 - define if not already set
-                            if (zero == NULL) {
-                                char assign_zero_command[COMMAND_LENGTH];
-                                sprintf(assign_zero_command, "IASN %s %d", $$, 0);
-                                append_value(generated_commands, assign_zero_command);
-                                zero = install(symbols_table, $$, INT_CODE, 0, true);
-                                sprintf($$, "T%d", temp_count++);
-                            }
+                            zero = get_zero();
+
+                            sprintf($$, "T%d", temp_count++);
 
                             char add_command[COMMAND_LENGTH];
                             bool is_const = a->is_const && b->is_const;
@@ -360,17 +442,10 @@ boolfactor      :   NOT '(' boolexpr ')'
                     {
                         struct dict_item* var = lookup(symbols_table, $3);
                         if (var != NULL) {
-                            sprintf($$, "T%d", temp_count++);
-
                             // We need a temporary variable to store the value of 1 - define if not already set
-                            if (one == NULL) {
-                                char assign_one_command[COMMAND_LENGTH];
-                                sprintf(assign_one_command, "IASN %s %d", $$, 1);
-                                append_value(generated_commands, assign_one_command);
-                                one = install(symbols_table, $$, INT_CODE, 1, true);
-                                sprintf($$, "T%d", temp_count++);
-                            }
+                            one = get_one();
 
+                            sprintf($$, "T%d", temp_count++);
                             char command[COMMAND_LENGTH];
 
                             // Using (1.0 - var->val) to invert the boolean value of var
