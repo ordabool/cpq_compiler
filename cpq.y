@@ -4,6 +4,7 @@
     #include <string.h>
     #include "types.h"
     #include "dict.h"
+    #include "stack.h"
     #include "linked_list.h"
 
     void yyerror (const char *s);
@@ -12,10 +13,15 @@
     int temp_count = 0;
     dict symbols_table;
     struct linked_list* generated_commands = NULL;
+    struct stack* backpatch_stack;
     #define NO_VAL -1
     #define COMMAND_LENGTH 200
     struct dict_item* one = NULL;
     struct dict_item* zero = NULL;
+
+    void backpatch(struct list_node* command_node, int address) {
+        sprintf(command_node->value, command_node->value, address);
+    }
 }
 
 %code requires {
@@ -74,13 +80,14 @@ program         :   declarations stmt_block
                         free_dict(symbols_table);
                         printf("Symbols table freed\n");
 
-                        printf("\nTotal commands: %d\n", count_linked_list(generated_commands));
+                        printf("\nTotal commands: %d\n", generated_commands->size);
 
                         printf("---------------------------------------------\n\n");
                         print_linked_list(generated_commands);
 
                         printf("\n");
                         free_linked_list(generated_commands);
+                        free_stack(backpatch_stack);
                     }
                 ;
 
@@ -154,6 +161,20 @@ input_stmt      :   INPUT '(' ID ')' ';'
                 ;
 
 output_stmt     :   OUTPUT '(' expression ')' ';'
+                    {
+                        struct dict_item* var = lookup(symbols_table, $3);
+                        if (var == NULL) {
+                            fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                        } else {
+                            char command[COMMAND_LENGTH];
+                            if (var->type == INT_CODE) {
+                                sprintf(command, "IPRT %s", $3);
+                            } else {
+                                sprintf(command, "RPRT %s", $3);
+                            }
+                            generated_commands = append_value(generated_commands, command);
+                        }
+                    }
                 ;
 
 if_stmt         :   IF '(' boolexpr ')'
@@ -161,34 +182,43 @@ if_stmt         :   IF '(' boolexpr ')'
                         struct dict_item* cond = lookup(symbols_table, $3);
                         if (cond == NULL) {
                             fprintf(stderr, "line %d: Internal error: boolean result not found\n", yylineno);
+                        } else {
+                            // In this case, to continue the parsing, set $3 as zero
+                            if (zero == NULL) {
+                                char assign_zero_command[COMMAND_LENGTH];
+                                sprintf($3, "T%d", temp_count++);
+                                sprintf(assign_zero_command, "IASN %s %d", $3, 0);
+                                append_value(generated_commands, assign_zero_command);
+                                zero = install(symbols_table, $3, INT_CODE, 0, true);
+                            }
+                            strcpy($3, zero->name);
                         }
 
                         char jump_command[COMMAND_LENGTH];
-                        // TODO: calculate the jump address
-                        int else_address = 2;
-                        sprintf(jump_command, "JMPZ %d %s", else_address, $3);
+                        sprintf(jump_command, "JMPZ %%d %s", $3);
                         append_value(generated_commands, jump_command);
-                        // zero = install(symbols_table, $$, INT_CODE, 0, true);
-                        // sprintf($$, "T%d", temp_count++);
+                        backpatch_stack = push_stack(backpatch_stack, generated_commands->tail);
                     }
                     stmt
                     {
                         char jump_command[COMMAND_LENGTH];
-                        // TODO: calculate the jump address
-                        int next_address = 3;
-                        sprintf(jump_command, "JMP %d", next_address);
+                        sprintf(jump_command, "JMP %%d");
                         append_value(generated_commands, jump_command);
+                        backpatch_stack = push_stack(backpatch_stack, generated_commands->tail);
                     }
                     ELSE 
                     {
-                        // TODO: now will be the else address
+                        // here we need to backpatch the JMPZ command, but leave the last JMP command
+                        // so we need to pop twice but push the first one back
+                        struct list_node* command_node = pop_stack(backpatch_stack);
+                        struct list_node* command_node_2 = pop_stack(backpatch_stack);
+                        backpatch(command_node_2, generated_commands->size + 1);
+                        backpatch_stack = push_stack(backpatch_stack, command_node);
                     }
                     stmt
                     {
-                        struct dict_item* cond = lookup(symbols_table, $3);
-                        if (cond == NULL) {
-                            fprintf(stderr, "line %d: Internal error: boolean result not found\n", yylineno);
-                        }
+                        struct list_node* command_node = pop_stack(backpatch_stack);
+                        backpatch(command_node, generated_commands->size + 1);
                     }
                 ;
 
@@ -214,6 +244,7 @@ stmtlist        :   stmtlist stmt
 
 boolexpr        :   boolexpr OR boolterm
                     {
+                        // TODO: if I want to implement short-circuit evaluation, I need to check if the first term is true
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
@@ -260,6 +291,7 @@ boolexpr        :   boolexpr OR boolterm
 
 boolterm        :   boolterm AND boolfactor
                     {
+                        // TODO: if I want to implement short-circuit evaluation, I need to check if the first operand is false
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
