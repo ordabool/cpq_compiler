@@ -1,5 +1,5 @@
 CC = gcc
-OBJS = cpq.o linked_list.o dict.o lex.yy.c cpq.tab.h cpq.tab.c
+OBJS = cpq.o linked_list.o stack.o dict.o lex.yy.c cpq.tab.h cpq.tab.c
 EXEC = cpq
 COMP_FLAG = -Wno-implicit-function-declaration -Wno-int-conversion
 
@@ -18,6 +18,9 @@ dict.o : dict.c
 
 linked_list.o : linked_list.c
 	@$(CC) -c $(COMP_FLAG) linked_list.c
+
+stack.o : stack.c
+	@$(CC) -c $(COMP_FLAG) stack.c
 
 lex.yy.c : cpq.lex
 	@flex cpq.lex
