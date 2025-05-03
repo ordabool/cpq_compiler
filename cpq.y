@@ -181,7 +181,7 @@ if_stmt         :   IF '(' boolexpr ')'
                     {
                         struct dict_item* cond = lookup(symbols_table, $3);
                         if (cond == NULL) {
-                            fprintf(stderr, "line %d: Internal error: boolean result not found\n", yylineno);
+                            fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
                         } else {
                             // In this case, to continue the parsing, set $3 as zero
                             if (zero == NULL) {
@@ -210,10 +210,11 @@ if_stmt         :   IF '(' boolexpr ')'
                     {
                         // here we need to backpatch the JMPZ command, but leave the last JMP command
                         // so we need to pop twice but push the first one back
-                        struct list_node* command_node = pop_stack(backpatch_stack);
-                        struct list_node* command_node_2 = pop_stack(backpatch_stack);
-                        backpatch(command_node_2, generated_commands->size + 1);
-                        backpatch_stack = push_stack(backpatch_stack, command_node);
+                        struct list_node* jmp_command_node = pop_stack(backpatch_stack);
+                        struct list_node* jmpz_command_node = pop_stack(backpatch_stack);
+
+                        backpatch(jmpz_command_node, generated_commands->size + 1);
+                        backpatch_stack = push_stack(backpatch_stack, jmp_command_node);
                     }
                     stmt
                     {
@@ -222,7 +223,46 @@ if_stmt         :   IF '(' boolexpr ')'
                     }
                 ;
 
-while_stmt      :   WHILE '(' boolexpr ')' stmt
+while_stmt      :   WHILE '('
+                    {
+                        // we are using the backpatch stack to hold the command even though we don't need to backpatch it
+                        // we just need to hold it until we reach the end of the while statement
+                        char while_restart_command[COMMAND_LENGTH];
+                        sprintf(while_restart_command, "JMP %d", generated_commands->size + 1);
+                        struct list_node* while_restart = new_list_node(while_restart_command);
+                        backpatch_stack = push_stack(backpatch_stack, while_restart);
+                    }
+                    boolexpr
+                    {
+                        struct dict_item* cond = lookup(symbols_table, $4);
+                        if (cond == NULL) {
+                            fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $4);
+                            if (zero == NULL) {
+                                char assign_zero_command[COMMAND_LENGTH];
+                                sprintf($4, "T%d", temp_count++);
+                                sprintf(assign_zero_command, "IASN %s %d", $4, 0);
+                                append_value(generated_commands, assign_zero_command);
+                                zero = install(symbols_table, $4, INT_CODE, 0, true);
+                            }
+                            strcpy($4, zero->name);
+                        }
+
+                        char jump_command[COMMAND_LENGTH];
+                        sprintf(jump_command, "JMPZ %%d %s", $4);
+                        append_value(generated_commands, jump_command);
+                        backpatch_stack = push_stack(backpatch_stack, generated_commands->tail);
+                    }
+                    ')' stmt
+                    {
+                        // here we need to first append the last JMP command, and then backpatch the JMPZ command
+                        struct list_node* jmpz_node = pop_stack(backpatch_stack);
+                        struct list_node* while_restart_node = pop_stack(backpatch_stack);
+                        append_value(generated_commands, while_restart_node->value);
+                        backpatch(jmpz_node, generated_commands->size + 1);
+
+                        // this one was manually created in the while_stmt rule - need to free it
+                        free(while_restart_node);
+                    }
                 ;
 
 switch_stmt     :   SWITCH '(' expression ')' '{' caselist DEFAULT ':' stmtlist '}'
@@ -244,7 +284,6 @@ stmtlist        :   stmtlist stmt
 
 boolexpr        :   boolexpr OR boolterm
                     {
-                        // TODO: if I want to implement short-circuit evaluation, I need to check if the first term is true
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
@@ -291,7 +330,6 @@ boolexpr        :   boolexpr OR boolterm
 
 boolterm        :   boolterm AND boolfactor
                     {
-                        // TODO: if I want to implement short-circuit evaluation, I need to check if the first operand is false
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
@@ -394,7 +432,7 @@ boolfactor      :   NOT '(' boolexpr ')'
                                 }
                                 if (b->type == INT_CODE) {
                                     char cast_command[COMMAND_LENGTH];
-                                    sprintf(cast_command, "ITOR %s %s", $$, a->name);
+                                    sprintf(cast_command, "ITOR %s %s", $$, b->name);
                                     append_value(generated_commands, cast_command);
                                     b = install(symbols_table, $$, FLOAT_CODE, b->val, is_const);
                                     sprintf($$, "T%d", temp_count++);

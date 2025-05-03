@@ -6,6 +6,9 @@ c, d: int;
     input(a);
     input(b);
 
+    while (a > 5)
+        output(a);
+
     c = 3 * 2.0;
     c = 6 - 1;
 
