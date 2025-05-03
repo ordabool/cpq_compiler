@@ -7,7 +7,10 @@ c, d: int;
     input(b);
 
     while (a > 5)
-        output(a);
+        if (b > 6)
+           output(a);
+        else
+           output(b);
 
     c = 3 * 2.0;
     c = 6 - 1;
