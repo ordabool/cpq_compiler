@@ -3,6 +3,8 @@
 
 int main (int argc, char **argv) {
     extern FILE *yyin;
+
+    // Validate the file argument
     if (argc != 2) {
        fprintf (stderr, "Usage: %s <input-file-name>\n", argv[0]);
        return 1;

@@ -19,10 +19,19 @@ typedef struct dict_item {
 typedef dict_item* dict[HASHSIZE];
 
 
+// Hash function to compute the hash value of a string
 unsigned hash(char *s);
+
+// Lookup function to find an item in the dictionary
 struct dict_item* lookup(dict d, char *s);
+
+// Install function to add or update an item in the dictionary
 struct dict_item* install(dict d, char* name, int type, float val, bool is_const);
+
+// Function to print the contents of the dictionary
 void print_dict(dict d);
+
+// Function to free the memory allocated for the dictionary
 void free_dict(dict d);
 
 #endif // DICT_H

@@ -1,5 +1,7 @@
 #include "linked_list.h"
 
+// This is a classic implementation of a linked list in C
+
 struct linked_list* new_linked_list(const char* value) {
     struct linked_list* list = (struct linked_list*)malloc(sizeof(struct linked_list));
     list->head = new_list_node(value);

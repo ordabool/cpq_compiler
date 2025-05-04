@@ -11,14 +11,23 @@
 
     extern int yylineno;
     int temp_count = 0;
+
+    // The symbols table is a dictionary that maps variable names to their types and values
     dict symbols_table;
+
+    // The generated commands are stored in a linked list throughout the parsing process
     struct linked_list* generated_commands = NULL;
+
+    // The backpatch stack is used to store the addresses of commands that need to be backpatched later
     struct stack* backpatch_stack;
+
     #define NO_VAL -1
     #define COMMAND_LENGTH 200
+    bool error_flag = false;
+
+    // Special dictionary items for 0 and 1 temporary variables - used mainly for boolean operations
     struct dict_item* one = NULL;
     struct dict_item* zero = NULL;
-    bool error_flag = false;
 
     void backpatch(struct list_node* command_node, int address) {
         sprintf(command_node->value, command_node->value, address);
@@ -168,6 +177,7 @@ assignment_stmt :   ID '=' expression ';'
                         struct dict_item* a = lookup(symbols_table, $1);
                         struct dict_item* b = lookup(symbols_table, $3);
                         if (a != NULL && b != NULL) {
+                            // Validate that the assignment is valid
                             if (a->type == INT_CODE && b->type == FLOAT_CODE) {
                                 fprintf(stderr, "line %d: Invalid assignment of float to int variable %s\n", yylineno, $1);
                                 error_flag = true;
@@ -175,6 +185,7 @@ assignment_stmt :   ID '=' expression ';'
                                 char command[COMMAND_LENGTH];
                                 if (a->type == FLOAT_CODE) {
                                     if (b->type == INT_CODE) {
+                                        // Cast the int to float
                                         sprintf($3, "T%d", temp_count++);
 
                                         char cast_command[COMMAND_LENGTH];
@@ -245,8 +256,8 @@ if_stmt         :   IF '(' boolexpr ')'
                         if (cond == NULL) {
                             fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
                             error_flag = true;
-                            // In this case, to continue the parsing, set $3 as zero
                             zero = get_zero();
+                            // In this case, to continue the parsing, set $3 as zero
                             strcpy($3, zero->name);
                         }
 
@@ -462,6 +473,7 @@ caselist        :   caselist CASE NUM ':'
 
 break_stmt      :   BREAK ';'
                     {
+                        // Validate that the break statement is in a valid context
                         bool case_context = false;
                         for (int i = backpatch_stack->top; i > -1; i--) {
                             if (strcmp(backpatch_stack->stack_arr[i]->value, "SWITCH_START") == 0) {
@@ -599,6 +611,7 @@ boolfactor      :   NOT '(' boolexpr ')'
                             char command[COMMAND_LENGTH];
                             bool is_const = a->is_const && b->is_const;
 
+                            // Start the command with X, and replace it with the right type later
                             float res = NO_VAL;
                             switch ($2) {
                                 case EQ:
@@ -675,6 +688,7 @@ expression      :   expression ADDOP term
                             char command[COMMAND_LENGTH];
                             bool is_const = a->is_const && b->is_const;
 
+                            // Start the command with X, and replace it with the right type later
                             float res = NO_VAL;
                             if ($2 == ADD) {
                                 res = is_const ? a->val + b->val : NO_VAL;
@@ -738,6 +752,7 @@ term            :   term MULOP factor
                                 char command[COMMAND_LENGTH];
                                 bool is_const = a->is_const && b->is_const;
 
+                                // Start the command with X, and replace it with the right type later
                                 float res = NO_VAL;
                                 if ($2 == MUL) {
                                     res = is_const ? a->val * b->val : NO_VAL;

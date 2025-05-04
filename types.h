@@ -1,6 +1,8 @@
 #ifndef TYPES_H
 #define TYPES_H
 
+// This header file defines the types used in the program
+
 #define EQ                      10
 #define NEQ                     11
 #define LT                      12
