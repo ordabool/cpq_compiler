@@ -6,11 +6,15 @@ c, d: int;
     input(a);
     input(b);
 
-    while (a > 5)
-        if (b > 6)
-           output(a);
-        else
-           output(b);
+    while (a > 5) {
+        a = a - 1;
+        break;
+    }
+
+    if (b > 6)
+        break;
+    else
+        output(b);
 
     switch(c) {
         case 4:

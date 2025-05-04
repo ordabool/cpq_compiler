@@ -166,7 +166,6 @@ assignment_stmt :   ID '=' expression ';'
                                 char command[COMMAND_LENGTH];
                                 if (a->type == FLOAT_CODE) {
                                     if (b->type == INT_CODE) {
-                                        // char temp_name[50];
                                         sprintf($3, "T%d", temp_count++);
 
                                         char cast_command[COMMAND_LENGTH];
@@ -268,13 +267,17 @@ if_stmt         :   IF '(' boolexpr ')'
 
 while_stmt      :   WHILE '('
                     {
+                        // Add a flag to mark a while context
+                        char* while_start_flag = "WHILE_START";
+                        struct list_node* while_flag = new_list_node(while_start_flag);
+                        backpatch_stack = push_stack(backpatch_stack, while_flag);
+
                         // we are using the backpatch stack to hold the command even though we don't need to backpatch it
                         // we just need to hold it until we reach the end of the while statement
                         char while_restart_command[COMMAND_LENGTH];
                         sprintf(while_restart_command, "JMP %d", generated_commands->size + 1);
                         struct list_node* while_restart = new_list_node(while_restart_command);
                         backpatch_stack = push_stack(backpatch_stack, while_restart);
-                        // TODO: Add a flag to mark the start of the while statement, and backpatch all jumps for breaks at the end, like in switch
                     }
                     boolexpr
                     {
@@ -293,14 +296,34 @@ while_stmt      :   WHILE '('
                     }
                     ')' stmt
                     {
-                        // here we need to first append the last JMP command, and then backpatch the JMPZ command
-                        struct list_node* jmpz_node = pop_stack(backpatch_stack);
-                        struct list_node* while_restart_node = pop_stack(backpatch_stack);
-                        append_value(generated_commands, while_restart_node->value);
-                        backpatch(jmpz_node, generated_commands->size + 1);
+                        printf("0 - Backpatch stack\n");
+                        print_stack(backpatch_stack);
 
-                        // this one was manually created in the while_stmt rule - need to free it
-                        free(while_restart_node);
+                        // Pop all the elements until we reach the WHILE_START flag
+                        struct stack* popped;
+                        while (backpatch_stack->top > -1 && strcmp(backpatch_stack->stack_arr[backpatch_stack->top]->value, "WHILE_START") != 0) {
+                            struct list_node* popped_node = pop_stack(backpatch_stack);
+                            popped = push_stack(popped, popped_node);
+                        }
+
+                        // Pop switch_condition and switch_flag now that the switch is done
+                        struct list_node* while_restart_node = pop_stack(popped);
+                        append_value(generated_commands, while_restart_node->value);
+                        struct list_node* while_flag = pop_stack(backpatch_stack);
+
+                        printf("Backpatch stack\n");
+                        print_stack(backpatch_stack);
+
+                        printf("Popped stack\n");
+                        print_stack(popped);
+
+                        printf("line number to backpatch: %d\n", generated_commands->size + 1);
+
+                        // Backpatch all jumps (JMPZ of condition, or break JMP) in popped
+                        while (popped->top > -1) {
+                            struct list_node* popped_node = pop_stack(popped);
+                            backpatch(popped_node, generated_commands->size + 1);
+                        }
                     }
                 ;
 
@@ -432,7 +455,6 @@ caselist        :   caselist CASE NUM ':'
 
 break_stmt      :   BREAK ';'
                     {
-                        // TODO: allow break statement in while context
                         bool case_context = false;
                         for (int i = backpatch_stack->top; i > -1; i--) {
                             if (strcmp(backpatch_stack->stack_arr[i]->value, "SWITCH_START") == 0) {
@@ -443,6 +465,10 @@ break_stmt      :   BREAK ';'
                                 case_context = true;
                                 break;
                             }
+                            if (strcmp(backpatch_stack->stack_arr[i]->value, "WHILE_START") == 0) {
+                                case_context = true;
+                                break;
+                            }
                         }
 
                         if (case_context) {
@@ -450,7 +476,7 @@ break_stmt      :   BREAK ';'
                             append_value(generated_commands, break_command->value);
                             backpatch_stack = push_stack(backpatch_stack, generated_commands->tail);
                         } else {
-                            fprintf(stderr, "line %d: Break statement not in case context!\n", yylineno);
+                            fprintf(stderr, "line %d: Break statement not in case or while context!\n", yylineno);
                         }
                     }
                 ;
