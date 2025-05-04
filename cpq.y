@@ -7,7 +7,7 @@
     #include "stack.h"
     #include "linked_list.h"
 
-    void yyerror (const char *s);
+    void yyerror (char* output_file, const char* s);
 
     extern int yylineno;
     int temp_count = 0;
@@ -18,6 +18,7 @@
     #define COMMAND_LENGTH 200
     struct dict_item* one = NULL;
     struct dict_item* zero = NULL;
+    bool error_flag = false;
 
     void backpatch(struct list_node* command_node, int address) {
         sprintf(command_node->value, command_node->value, address);
@@ -54,6 +55,7 @@
         float val;
     };
 }
+%parse-param {char* output_file}
 
 %union {
     int attr;
@@ -93,23 +95,29 @@
 
 program         :   declarations stmt_block
                     {
+                        // Add HALT and signature line to the generated commands
                         append_value(generated_commands, "HALT");
                         append_value(generated_commands, "Created by Or Dabool");
 
-                        printf("\n---------------------------------------------\n");
-                        printf("Program complete, cleaning up..\n");
+                        // If no errors, write the generated commands to the output file
+                        if (!error_flag) {
+                            FILE* output = fopen(output_file, "w");
+                            if (output == NULL) {
+                                fprintf(stderr, "Error opening output file %s\n", output_file);
+                                exit(1);
+                            }
+                            struct list_node* current = generated_commands->head;
+                            while (current != NULL) {
+                                fprintf(output, "%s\n", current->value);
+                                current = current->next;
+                            }
+                            fclose(output);
+                        } else {
+                            fprintf(stderr, "Errors found during parsing. No output file generated.\n");
+                        }
 
-                        printf("\nSymbols table:\n");
-                        print_dict(symbols_table);
+                        // Program complete, cleaning up..
                         free_dict(symbols_table);
-                        printf("Symbols table freed\n");
-
-                        printf("\nTotal commands: %d\n", generated_commands->size);
-
-                        printf("---------------------------------------------\n\n");
-                        print_linked_list(generated_commands);
-
-                        printf("\n");
                         free_linked_list(generated_commands);
                         free_stack(backpatch_stack);
                     }
@@ -162,6 +170,7 @@ assignment_stmt :   ID '=' expression ';'
                         if (a != NULL && b != NULL) {
                             if (a->type == INT_CODE && b->type == FLOAT_CODE) {
                                 fprintf(stderr, "line %d: Invalid assignment of float to int variable %s\n", yylineno, $1);
+                                error_flag = true;
                             } else {
                                 char command[COMMAND_LENGTH];
                                 if (a->type == FLOAT_CODE) {
@@ -183,9 +192,11 @@ assignment_stmt :   ID '=' expression ';'
                         } else {
                             if (a == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                error_flag = true;
                             }
                             if (b == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                error_flag = true;
                             }
                         }
                     }
@@ -197,6 +208,7 @@ input_stmt      :   INPUT '(' ID ')' ';'
 
                         if (var == NULL) {
                             fprintf (stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            error_flag = true;
                         } else {
                             char command[COMMAND_LENGTH];
                             if (var->type == INT_CODE) {
@@ -214,6 +226,7 @@ output_stmt     :   OUTPUT '(' expression ')' ';'
                         struct dict_item* var = lookup(symbols_table, $3);
                         if (var == NULL) {
                             fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            error_flag = true;
                         } else {
                             char command[COMMAND_LENGTH];
                             if (var->type == INT_CODE) {
@@ -231,6 +244,7 @@ if_stmt         :   IF '(' boolexpr ')'
                         struct dict_item* cond = lookup(symbols_table, $3);
                         if (cond == NULL) {
                             fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            error_flag = true;
                             // In this case, to continue the parsing, set $3 as zero
                             zero = get_zero();
                             strcpy($3, zero->name);
@@ -284,6 +298,7 @@ while_stmt      :   WHILE '('
                         struct dict_item* cond = lookup(symbols_table, $4);
                         if (cond == NULL) {
                             fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $4);
+                            error_flag = true;
                             // In this case, to continue the parsing, set $4 as zero
                             zero = get_zero();
                             strcpy($4, zero->name);
@@ -296,9 +311,6 @@ while_stmt      :   WHILE '('
                     }
                     ')' stmt
                     {
-                        printf("0 - Backpatch stack\n");
-                        print_stack(backpatch_stack);
-
                         // Pop all the elements until we reach the WHILE_START flag
                         struct stack* popped;
                         while (backpatch_stack->top > -1 && strcmp(backpatch_stack->stack_arr[backpatch_stack->top]->value, "WHILE_START") != 0) {
@@ -310,14 +322,6 @@ while_stmt      :   WHILE '('
                         struct list_node* while_restart_node = pop_stack(popped);
                         append_value(generated_commands, while_restart_node->value);
                         struct list_node* while_flag = pop_stack(backpatch_stack);
-
-                        printf("Backpatch stack\n");
-                        print_stack(backpatch_stack);
-
-                        printf("Popped stack\n");
-                        print_stack(popped);
-
-                        printf("line number to backpatch: %d\n", generated_commands->size + 1);
 
                         // Backpatch all jumps (JMPZ of condition, or break JMP) in popped
                         while (popped->top > -1) {
@@ -332,10 +336,12 @@ switch_stmt     :   SWITCH '(' expression ')'
                         struct dict_item* cond = lookup(symbols_table, $3);
                         if (cond == NULL) {
                             fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            error_flag = true;
                             zero = get_zero();
                             strcpy($3, zero->name);
                         } else if (cond->type != INT_CODE) {
                             fprintf(stderr, "line %d: The variable %s is not an integer!\n", yylineno, $3);
+                            error_flag = true;
                             zero = get_zero();
                             strcpy($3, zero->name);
                         }
@@ -447,6 +453,7 @@ caselist        :   caselist CASE NUM ':'
                             }
                         } else {
                             fprintf(stderr, "line %d: Case value is not an integer!\n", yylineno);
+                            error_flag = true;
                         }
                     }
                     stmtlist
@@ -477,6 +484,7 @@ break_stmt      :   BREAK ';'
                             backpatch_stack = push_stack(backpatch_stack, generated_commands->tail);
                         } else {
                             fprintf(stderr, "line %d: Break statement not in case or while context!\n", yylineno);
+                            error_flag = true;
                         }
                     }
                 ;
@@ -517,10 +525,12 @@ boolexpr        :   boolexpr OR boolterm
                         } else {
                             if (a == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                error_flag = true;
                                 strcpy($$, $3);
                             }
                             if (b == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                error_flag = true;
                                 strcpy($$, $1);
                             }
                         }
@@ -545,10 +555,12 @@ boolterm        :   boolterm AND boolfactor
                         } else {
                             if (a == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                error_flag = true;
                                 strcpy($$, $3);
                             }
                             if (b == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                error_flag = true;
                                 strcpy($$, $1);
                             }
                         }
@@ -574,6 +586,7 @@ boolfactor      :   NOT '(' boolexpr ')'
                             append_value(generated_commands, command);
                         } else {
                             fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            error_flag = true;
                             strcpy($$, $3);
                         }
                     }
@@ -641,10 +654,12 @@ boolfactor      :   NOT '(' boolexpr ')'
                         } else {
                             if (a == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                error_flag = true;
                                 strcpy($$, $3);
                             }
                             if (b == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                error_flag = true;
                                 strcpy($$, $1);
                             }
                         }
@@ -696,10 +711,12 @@ expression      :   expression ADDOP term
                         } else {
                             if (a == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                error_flag = true;
                                 strcpy($$, $3);
                             }
                             if (b == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                error_flag = true;
                                 strcpy($$, $1);
                             }
                         }
@@ -714,6 +731,7 @@ term            :   term MULOP factor
                         if (a != NULL && b != NULL) {
                             if ($2 == DIV && b->is_const && b->val == 0) {
                                 fprintf(stderr, "line %d: Division by zero\n", yylineno);
+                                error_flag = true;
                                 strcpy($$, $1);
                             } else {
                                 sprintf($$, "T%d", temp_count++);
@@ -757,10 +775,12 @@ term            :   term MULOP factor
                         } else {
                             if (a == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $1);
+                                error_flag = true;
                                 strcpy($$, $3);
                             }
                             if (b == NULL) {
                                 fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                                error_flag = true;
                                 strcpy($$, $1);
                             }
                         }
@@ -774,6 +794,7 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
                         struct dict_item* var = lookup(symbols_table, $3);
                         if (var == NULL) {
                             fprintf(stderr, "line %d: The variable %s was not declared!\n", yylineno, $3);
+                            error_flag = true;
                             strcpy($$, $3);
                         } else {
                             char command[COMMAND_LENGTH];
@@ -810,7 +831,8 @@ factor          :   '(' expression ')' { strcpy($$, $2); }
 
 %%
 
-void yyerror (const char *s) {
+void yyerror (char* output_file, const char* s) {
     fprintf (stderr, "line %d: %s\n", yylineno, s);
+    error_flag = true;
 }
 

@@ -27,7 +27,6 @@ struct dict_item* install(dict d, char* name, int type, float val, bool is_const
         // If not found, create a new item
         di = (struct dict_item *) malloc(sizeof(*di));
 
-        // TODO: Should probably check for malloc failure on every malloc - go over the code and add checks!
         // Check that malloc & strdup were successful
         if (di == NULL || (di->name = strdup(name)) == NULL)
             fprintf(stderr, "Out of memory\n"), exit(1);

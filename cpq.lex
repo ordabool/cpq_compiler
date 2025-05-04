@@ -63,9 +63,8 @@ letter                          [A-Za-z]
 
 [\t\n ]+                        /* ignore spaces, tabs and newlines */
 
-.                               { /* TODO: this rule is copied from the example, maybe I'll want to write it differently */
-                                    fprintf (stderr, "line %d: unrecognized token %c\n", yylineno, yytext[0]);  /* TODO: See that I can access yylineno here */
-                                    exit(1);
+.                               {
+                                    fprintf (stderr, "line %d: unrecognized token %c\n", yylineno, yytext[0]);
                                 }
 
 %%

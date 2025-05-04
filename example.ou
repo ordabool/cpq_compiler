@@ -12,7 +12,7 @@ c, d: int;
     }
 
     if (b > 6)
-        break;
+        output(a);
     else
         output(b);
 
@@ -26,7 +26,7 @@ c, d: int;
             output(1);
     }
 
-    c = 3 * 2.0;
+    c = 3 * 2;
     c = 6 - 1;
 
     d = cast<int>(b);
